@@ -177,5 +177,12 @@
 {% endfor %}
 {% endif %}
 
+{% if itinerary %}
+<div class="next-step-bar" style="margin-top:8px; margin-bottom:20px;">
+  <span style="color:var(--text-muted); font-size:14px;">일정이 준비됐어요. 이제 숙소를 골라볼까요?</span>
+  <a class="btn btn-primary" href="{{ url_for('lodging.index') }}">주변 숙소로 이동 →</a>
+</div>
+{% endif %}
+
 <a class="btn btn-outline btn-block" href="{{ url_for('planner.export_json') }}">JSON으로 일정 저장</a>
 {% endblock %}
