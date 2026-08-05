@@ -30,6 +30,10 @@ STYLES = ["맛집", "관광", "자연", "문화·역사", "카페", "액티비�
 CATEGORIES = ["관광지", "음식점", "문화시설", "축제", "숙소", "기타"]
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _days(start: date, end: date) -> list[date]:
     return [start + timedelta(days=i) for i in range((end - start).days + 1)]
 
@@ -43,7 +47,8 @@ def _init(region: dict) -> None:
         "planner_departure": origin.get("name", "출발지 미입력"), "planner_transport": "자가용",
         "planner_budget": 300000, "planner_styles": ["맛집", "관광"], "planner_preferences": "",
         "planner_candidates": [], "planner_query": "", "planner_mode": "", "planner_llm": None,
-        "planner_itinerary": [], "planner_flight_info": None, "planner_region_key": region["name"],
+        "planner_itinerary": [], "planner_flight_info": None,
+        "planner_use_tmap": _env_flag("ENABLE_TMAP_TRANSIT"), "planner_region_key": region["name"],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -53,6 +58,18 @@ def _init(region: dict) -> None:
             st.session_state[key] = [] if key in ("planner_candidates", "planner_itinerary") else "" if key in ("planner_query", "planner_mode") else None
         st.session_state.planner_region_key = region["name"]
         st.session_state.planner_title = f"{region['name']} 여행"
+
+
+def _developer_options() -> None:
+    """Expose chargeable API controls only in an explicitly enabled dev mode."""
+    if not _env_flag("DEVELOPER_MODE"):
+        return
+    with st.sidebar.expander("개발자 옵션"):
+        st.session_state.planner_use_tmap = st.toggle(
+            "TMAP 대중교통 API 사용",
+            value=st.session_state.planner_use_tmap,
+            help="항공 이동·운행 정보를 조회합니다. 호출 비용이 발생할 수 있습니다.",
+        )
 
 
 def _profile(region: dict) -> dict:
@@ -72,12 +89,20 @@ def _load_flight_info(region: dict) -> None:
     st.session_state.planner_flight_info = None
     if st.session_state.planner_transport != "항공":
         return
+    if not st.session_state.planner_use_tmap:
+        st.session_state.planner_flight_info = {
+            "available": False,
+            "disabled": True,
+            "message": "개발자 설정에서 TMAP 대중교통 API 사용이 꺼져 있습니다.",
+        }
+        return
     origin = st.session_state.trip_context.get("origin", {})
     try:
         st.session_state.planner_flight_info = fetch_air_travel_info(
             float(origin["latitude"]), float(origin["longitude"]),
             float(region["latitude"]), float(region["longitude"]),
-            st.session_state.planner_start, os.getenv("TMAP_APP_KEY", ""),
+            st.session_state.planner_start,
+            os.getenv("TMAP_APP_KEY", ""),
         )
     except (KeyError, TypeError, ValueError):
         st.session_state.planner_flight_info = {"available": False, "message": "출발지 좌표가 없어 항공 이동 경로를 조회하지 못했습니다."}
@@ -230,15 +255,36 @@ def _show_plan(region: dict) -> None:
     st.metric("예상 총비용 (1인)", f"{plan['total_estimated_cost']:,}원")
     for day in plan["itinerary"]:
         with st.expander(f"{day['date']} · 예상 {day['daily_budget']:,}원", expanded=True):
-            for item in day["items"]:
-                st.markdown(f"**{item['time']} · {item['name']}**")
-                st.caption(f"{item['category']} · 이전 장소에서 {item['travel_minutes_from_previous']}분 · {item['estimated_cost']:,}원 · {item['address']}")
-                st.write(item["memo"])
+            for index, item in enumerate(day["items"]):
+                if index:
+                    minutes = item.get("travel_minutes_from_previous", 0)
+                    st.markdown(
+                        f"<div style='display:flex;align-items:center;gap:8px;margin:8px 0 8px 14px;'>"
+                        f"<span style='width:2px;height:24px;background:#4f8bf9;display:inline-block'></span>"
+                        f"<span style='font-size:1.25rem;color:#4f8bf9'>↓</span>"
+                        f"<span style='padding:3px 10px;border-radius:16px;background:#17345d;color:#d9e8ff;font-weight:600'>이동 {minutes}분</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                with st.container(border=True):
+                    st.markdown(f"### {item['time']} · {item['name']}")
+                    category, cost = st.columns(2)
+                    category.caption("카테고리")
+                    category.markdown(f"**{item['category']}**")
+                    cost.caption("예상 비용")
+                    cost.markdown(f"**{item['estimated_cost']:,}원**")
+                    if item.get("address"):
+                        st.caption(f"📍 {item['address']}")
+                    if item.get("memo"):
+                        st.write(item["memo"])
     flight_info = st.session_state.planner_flight_info
     if flight_info and st.session_state.planner_transport == "항공":
         if flight_info.get("available"):
             flight = flight_info["flights"][0]
-            st.info(f"TMAP 항공 이동 반영: {flight['departure']} → {flight['arrival']} · 약 {flight.get('minutes') or '-'}분")
+            operating = "운행 정보 확인" if flight.get("operating") else "운행 종료 또는 미확인"
+            st.info(f"TMAP 항공 이동 반영: {flight['departure']} → {flight['arrival']} · 약 {flight.get('minutes') or '-'}분 · {operating}")
+        elif flight_info.get("disabled"):
+            st.caption(f"TMAP 항공 이동 정보: {flight_info['message']}")
         else:
             st.warning(f"TMAP 항공 이동 정보: {flight_info.get('message')}")
     if st.button("일정 적용 후 주변 숙소로 이동", type="primary", use_container_width=True):
@@ -290,6 +336,7 @@ page_header("여행 플래너", "P1에서 확정한 여행지의 실제 TourAPI 
 region = require_region()
 if region:
     _init(region)
+    _developer_options()
     st.info(f"선택 여행지: **{region['name']}** · 출발지에서 약 {region['distance_km']}km")
     st.caption(f"목적지 연동: 랜덤 목적지 선정(P1) · **{region['name']}**")
     generate_requested = _profile_form()
