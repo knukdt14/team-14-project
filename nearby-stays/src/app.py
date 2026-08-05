@@ -23,6 +23,8 @@ LODGING_CATEGORY_CODE = "AD5"  # 카카오 카테고리 그룹 코드: 숙박
 REQUEST_TIMEOUT = 5  # seconds
 RADIUS_OPTIONS = [500, 1000, 2000, 3000]
 MAX_RECENT_SEARCHES = 5
+CENTER_MARKER_COLOR = "#e63946"  # 검색한 위치(빨강)
+LODGING_MARKER_COLOR = "#1d7ae0"  # 숙박시설(파랑)
 
 LODGING_TYPE_KEYWORDS = {
     "호텔": ["호텔"],
@@ -386,11 +388,24 @@ def main() -> None:
         st.write(f"총 **{len(filtered)}개**의 숙박시설을 표시하고 있습니다.")
 
         if filtered:
-            map_df = pd.DataFrame(
-                [{"lat": float(p["y"]), "lon": float(p["x"])} for p in filtered]
-                + [{"lat": center["y"], "lon": center["x"]}]
-            )
-            st.map(map_df, latitude="lat", longitude="lon", size=20)
+            lodging_points = [
+                {
+                    "lat": float(p["y"]),
+                    "lon": float(p["x"]),
+                    "color": LODGING_MARKER_COLOR,
+                    "size": 18,
+                }
+                for p in filtered
+            ]
+            center_point = {
+                "lat": center["y"],
+                "lon": center["x"],
+                "color": CENTER_MARKER_COLOR,
+                "size": 45,
+            }
+            map_df = pd.DataFrame(lodging_points + [center_point])
+            st.caption("🔴 검색한 위치 · 🔵 숙박시설")
+            st.map(map_df, latitude="lat", longitude="lon", color="color", size="size")
 
             csv_df = pd.DataFrame(
                 [
