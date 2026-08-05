@@ -11,7 +11,7 @@ import streamlit as st
 
 st.set_page_config(
     page_title="TripRoll",
-    page_icon="🎴",
+    page_icon="🏖️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -51,7 +51,6 @@ html, body, [class*="css"] { font-family: 'Pretendard', sans-serif; }
   border-radius: 16px !important;
   background: #101728;
 }
-
 /* 사이드바 */
 [data-testid="stSidebar"] { background: #0E1424; border-right: 1px solid #1C2439; }
 .side-brand {

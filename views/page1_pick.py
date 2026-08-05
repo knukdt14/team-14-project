@@ -38,7 +38,6 @@ st.markdown(
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   overflow: hidden; margin-bottom: 12px;
 }
-
 /* 뒷면 — 아직 안 뜯은 카드팩 */
 .card-back { background: #131A2E; border: 1px solid #232B45; }
 .card-back::before {
@@ -50,7 +49,6 @@ st.markdown(
 @keyframes sheen { 0% { transform: translateX(-30%); } 100% { transform: translateX(30%); } }
 .card-back .mark { font-size: 52px; font-weight: 900; color: #2B3350; z-index: 1; }
 .card-back .hint { font-size: 13px; color: #4A5270; margin-top: 10px; z-index: 1; }
-
 /* 앞면 — 열린 카드 */
 .card-front {
   border: 1px solid var(--g); background: #101728;
@@ -68,7 +66,6 @@ st.markdown(
   opacity: 0; animation: flash .55s ease-out both;
 }
 @keyframes flash { 0% { opacity: .45; } 100% { opacity: 0; } }
-
 .grade {
   font-size: 11px; font-weight: 700; letter-spacing: .18em;
   color: var(--g); border: 1px solid var(--g);
@@ -85,7 +82,6 @@ st.markdown(
   display: inline-block; font-size: 12px; color: #B9C0D4;
   background: #1A2238; border-radius: 6px; padding: 4px 10px; margin: 0 3px;
 }
-
 /* 확정 배너 */
 .confirmed {
   border: 1px solid #E9B949; border-radius: 16px;
@@ -94,7 +90,6 @@ st.markdown(
 .confirmed .label { font-size: 12px; letter-spacing: .2em; color: #E9B949; }
 .confirmed .place { font-size: 42px; font-weight: 900; color: #EDEBE4; margin: 8px 0 10px; }
 .confirmed .note { font-size: 14px; color: #7A8199; line-height: 1.7; }
-
 @media (prefers-reduced-motion: reduce) {
   .card-back::before, .card-front, .card-front::after { animation: none; }
 }
