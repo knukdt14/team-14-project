@@ -7,10 +7,12 @@ import os
 import re
 import sys
 from datetime import date, time, timedelta
+from math import log2
 from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
+import pydeck as pdk
 import streamlit as st
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
@@ -25,7 +27,7 @@ from views._common import page_header, require_region  # noqa: E402
 
 
 RELATIONSHIPS = ["가족", "부부", "연인", "친구", "동료", "혼자"]
-TRANSPORT = ["자가용", "대중교통", "항공", "도보 중심"]
+TRANSPORT = ["자동차", "대중교통", "항공", "도보 중심"]
 STYLES = ["맛집", "관광", "자연", "문화·역사", "카페", "액티비티", "휴식", "아이 동반"]
 CATEGORIES = ["관광지", "음식점", "문화시설", "축제", "숙소", "기타"]
 
@@ -44,7 +46,7 @@ def _init(region: dict) -> None:
     defaults = {
         "planner_title": f"{region['name']} 여행", "planner_start": date.today() + timedelta(days=7),
         "planner_end": date.today() + timedelta(days=9), "planner_count": 2, "planner_relationship": "친구",
-        "planner_departure": origin.get("name", "출발지 미입력"), "planner_transport": "자가용",
+        "planner_departure": origin.get("name", "출발지 미입력"), "planner_transport": "자동차",
         "planner_budget": 300000, "planner_styles": ["맛집", "관광"], "planner_preferences": "",
         "planner_candidates": [], "planner_query": "", "planner_mode": "", "planner_llm": None,
         "planner_itinerary": [], "planner_flight_info": None,
@@ -212,7 +214,68 @@ def _sync_context(region: dict) -> None:
         "itinerary": items, "center": center,
         "transportation": st.session_state.planner_transport,
         "flight_operation": st.session_state.planner_flight_info,
+        "route_points": _route_points(items),
     }
+
+
+def _route_points(items: list[dict]) -> list[dict]:
+    """Build map-only route points, including a car trip's departure and return."""
+    points = [
+        {
+            "name": item["name"], "latitude": item["latitude"], "longitude": item["longitude"],
+            "date": item["date"], "time": item["time"], "kind": "schedule",
+        }
+        for item in sorted(items, key=lambda value: (value["date"], value["time"]))
+        if item.get("latitude") is not None and item.get("longitude") is not None
+    ]
+    if not points or st.session_state.planner_transport != "자동차":
+        return points
+    origin = st.session_state.trip_context.get("origin", {})
+    if origin.get("latitude") is None or origin.get("longitude") is None:
+        return points
+    departure = {"name": f"출발지 · {origin.get('name', '출발지')}", "latitude": origin["latitude"], "longitude": origin["longitude"], "date": points[0]["date"], "time": "출발", "kind": "departure"}
+    return_point = {"name": f"복귀 · {origin.get('name', '출발지')}", "latitude": origin["latitude"], "longitude": origin["longitude"], "date": points[-1]["date"], "time": "복귀", "kind": "return"}
+    return [departure, *points, return_point]
+
+
+def _show_itinerary_map() -> None:
+    all_points = _route_points(st.session_state.planner_itinerary)
+    schedule_points = [point for point in all_points if point["kind"] == "schedule"]
+    if not schedule_points:
+        st.info("좌표가 있는 일정 장소가 생기면 동선 지도가 표시됩니다.")
+        return
+    st.subheader("일정 지도")
+    dates = list(dict.fromkeys(point["date"] for point in schedule_points))
+    labels = {"전체 일정": "전체 일정"}
+    labels.update({value: f"Day {index + 1} · {date.fromisoformat(value):%m/%d}" for index, value in enumerate(dates)})
+    selected_date = st.radio("표시할 동선", list(labels), format_func=labels.get, horizontal=True, key="planner_map_date")
+    if selected_date == "전체 일정":
+        points = all_points
+    else:
+        points = [point for point in schedule_points if point["date"] == selected_date]
+        if st.session_state.planner_transport == "자동차":
+            if selected_date == dates[0] and all_points[0]["kind"] == "departure":
+                points.insert(0, all_points[0])
+            if selected_date == dates[-1] and all_points[-1]["kind"] == "return":
+                points.append(all_points[-1])
+    map_points = [{"name": point["name"], "date": point["date"], "time": point["time"], "position": [point["longitude"], point["latitude"]], "color": [242, 183, 5] if point["kind"] != "schedule" else [52, 120, 246]} for point in points]
+    path = [{"path": [point["position"] for point in map_points]}]
+    latitude = sum(point["latitude"] for point in points) / len(points)
+    longitude = sum(point["longitude"] for point in points) / len(points)
+    span = max(max(point["latitude"] for point in points) - min(point["latitude"] for point in points), max(point["longitude"] for point in points) - min(point["longitude"] for point in points), 0.01)
+    zoom = max(5, min(13, 8.5 - log2(span)))
+    deck = pdk.Deck(
+        map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+        initial_view_state=pdk.ViewState(latitude=latitude, longitude=longitude, zoom=zoom, pitch=0),
+        layers=[
+            pdk.Layer("PathLayer", path, get_path="path", get_color=[41, 98, 255], width_scale=12, width_min_pixels=4, pickable=False),
+            pdk.Layer("ScatterplotLayer", map_points, get_position="position", get_fill_color="color", get_radius=180, radius_min_pixels=6, pickable=True),
+        ],
+        tooltip={"text": "{time} · {name}\n{date}"},
+    )
+    st.pydeck_chart(deck, use_container_width=True, height=460)
+    if st.session_state.planner_transport == "자동차":
+        st.caption("자동차 동선에는 출발지 → 첫 일정과 마지막 일정 → 출발지(복귀) 구간이 포함됩니다.")
 
 
 def _apply_plan(region: dict) -> None:
@@ -236,7 +299,7 @@ def _profile_form() -> bool:
             budget = st.number_input("1인 예산(원)", 50000, 5000000, st.session_state.planner_budget, step=50000)
             styles = st.multiselect("여행 스타일", STYLES, default=st.session_state.planner_styles)
         preferences = st.text_area("추가 요청", st.session_state.planner_preferences, placeholder="예: 아이와 함께라 무리 없는 동선, 해산물 제외")
-        submitted = st.form_submit_button("여행 조건 반영 및 AI 일정 생성", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("여행 조건 반영 · 일정 생성 · 지도 보기", type="primary", use_container_width=True)
     if submitted:
         if end < start or (end - start).days > 13:
             st.error("여행 날짜는 시작일 이후이며 최대 14일이어야 합니다.")
@@ -287,9 +350,6 @@ def _show_plan(region: dict) -> None:
             st.caption(f"TMAP 항공 이동 정보: {flight_info['message']}")
         else:
             st.warning(f"TMAP 항공 이동 정보: {flight_info.get('message')}")
-    if st.button("일정 적용 후 주변 숙소로 이동", type="primary", use_container_width=True):
-        _apply_plan(region)
-        st.switch_page("views/page3_lodging.py")
 
 
 def _manual(region: dict, days: list[date]) -> None:
@@ -313,6 +373,7 @@ def _manual(region: dict, days: list[date]) -> None:
 def _saved(region: dict, days: list[date]) -> None:
     if not st.session_state.planner_itinerary:
         return
+    _show_itinerary_map()
     st.subheader("내 일정")
     tabs = st.tabs([f"Day {i + 1} · {day.strftime('%m/%d')}" for i, day in enumerate(days)])
     for day, tab in zip(days, tabs):
@@ -346,7 +407,8 @@ if region:
         try:
             with st.spinner("TourAPI 조회 → 장소 설명 임베딩 검색 → LLM 일정 생성 중입니다..."):
                 _generate(region)
-            st.success("TourAPI 근거 기반 AI 일정을 생성했습니다.")
+            _apply_plan(region)
+            st.success("AI 일정을 확정하고 지도에 동선을 표시했습니다.")
         except (TourApiError, ValidationError, ValueError) as error:
             st.error(f"일정 생성에 실패했습니다: {error}")
         except Exception as error:
