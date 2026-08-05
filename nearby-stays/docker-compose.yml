@@ -1,0 +1,15 @@
+services:
+  nearby-stays:
+    build: .
+    image: minehddld/nearby-stays:latest
+    ports:
+      - "8501:7860"
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:7860/_stcore/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

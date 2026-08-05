@@ -9,6 +9,7 @@
 
 import os
 
+import altair as alt
 import pandas as pd
 import requests
 import streamlit as st
@@ -55,8 +56,8 @@ CARD_CSS = """
     box-shadow: 0 6px 18px rgba(0,0,0,0.09);
     transform: translateY(-2px);
 }
-.stay-name { font-size: 1.05rem; font-weight: 700; }
-.stay-address { color: #7a7a7a; font-size: 0.85rem; margin: 2px 0 6px 0; }
+.stay-name { font-size: 1.05rem; font-weight: 700; color: #1a1a1a; }
+.stay-address { color: #6b6b6b; font-size: 0.85rem; margin: 2px 0 6px 0; }
 .stay-badge {
     display: inline-block;
     color: white;
@@ -250,8 +251,23 @@ def render_summary(places: list[dict]) -> None:
     )
     cols[3].metric("숙소 유형 수", f"{len(set(types))}종")
 
-    type_counts = pd.Series(types).value_counts().sort_values(ascending=False)
-    st.bar_chart(type_counts, x_label="숙소 유형", y_label="개수")
+    type_counts = (
+        pd.Series(types)
+        .value_counts()
+        .sort_values(ascending=False)
+        .rename_axis("숙소 유형")
+        .reset_index(name="개수")
+    )
+    chart = (
+        alt.Chart(type_counts)
+        .mark_bar(color="#ff8a3d")
+        .encode(
+            x=alt.X("숙소 유형:N", sort="-y", axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("개수:Q"),
+            tooltip=["숙소 유형", "개수"],
+        )
+    )
+    st.altair_chart(chart, use_container_width=True)
 
 
 def render_sidebar() -> None:
