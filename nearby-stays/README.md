@@ -51,6 +51,30 @@ docker run -p 8501:7860 --env-file .env nearby-stays
 
 브라우저에서 http://localhost:8501 접속.
 
+이미지는 재현 가능한 빌드를 위해 `requirements.txt`에 버전을 고정했고,
+non-root 사용자로 실행되며 `HEALTHCHECK`가 포함되어 있습니다
+(`docker ps`로 `healthy` 상태 확인 가능).
+
+## Docker Compose로 실행 (실 서비스와 유사한 방식)
+
+재시작 정책과 헬스체크가 포함된 `docker-compose.yml`을 제공합니다.
+
+```bash
+docker compose up -d --build
+docker compose ps      # STATUS 컬럼에서 healthy 확인
+docker compose logs -f
+docker compose down
+```
+
+## Docker Hub
+
+빌드된 이미지는 [minehddld/nearby-stays](https://hub.docker.com/r/minehddld/nearby-stays)에
+푸시되어 있습니다. 직접 빌드하지 않고 바로 받아서 실행할 수도 있습니다.
+
+```bash
+docker run -p 8501:7860 --env-file .env minehddld/nearby-stays:latest
+```
+
 ## Hugging Face Spaces 배포
 
 이 저장소를 그대로 Hugging Face Space(SDK: Docker)에 push하면 위 `README.md`
@@ -62,10 +86,12 @@ Space의 **Settings → Repository secrets**에 `KAKAO_REST_API_KEY`를 등록�
 ```
 nearby-stays/
 ├── Dockerfile
+├── docker-compose.yml
 ├── .dockerignore
 ├── requirements.txt
 ├── .env.example
 ├── README.md
+├── ISSUES.md
 └── src/
     └── app.py
 ```
