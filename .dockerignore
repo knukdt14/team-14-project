@@ -1,0 +1,29 @@
+# 이미지에 넣지 않을 것들.
+# 여기 안 적으면 이미지가 쓸데없이 커지고 빌드도 느려진다.
+
+# 가상환경 — 컨테이너 안에서 새로 깔기 때문에 필요 없다
+.venv/
+venv/
+
+# 파이썬 캐시
+__pycache__/
+*.pyc
+
+# 깃 기록 — 앱 실행에 필요 없다
+.git/
+.gitignore
+
+# 비밀 키 — 이미지에 절대 굽지 않는다. compose가 따로 넣어 준다
+.env
+
+# 큰 지도 데이터 — 볼륨으로 붙인다
+data/sgis/*.geojson
+
+# 문서·스크립트
+README*.md
+setup.bat
+setup.sh
+
+# OS 찌꺼기
+.DS_Store
+Thumbs.db

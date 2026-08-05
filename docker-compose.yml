@@ -1,0 +1,39 @@
+# 컨테이너를 어떻게 띄울지 적어두는 파일.
+# 이 파일이 있으면 긴 docker 명령어 대신 `docker compose up` 한 줄이면 된다.
+
+services:
+  # ── 앱 컨테이너 ──────────────────────────────────────────
+  app:
+    build: .                      # 현재 폴더의 Dockerfile로 이미지를 만든다
+    container_name: triproll-app  # 컨테이너에 붙일 이름
+
+    ports:
+      # "내 PC 포트:컨테이너 포트"
+      # 브라우저에서 localhost:8501로 들어가면 컨테이너 8501로 연결된다.
+      # 8501이 이미 쓰이고 있으면 앞 숫자만 8502로 바꾸면 된다.
+      - "8501:8501"
+
+    volumes:
+      # 현재 폴더를 컨테이너의 /app에 그대로 연결한다.
+      # 덕분에 코드를 고치면 다시 빌드하지 않아도 바로 반영된다.
+      - .:/app
+
+    env_file:
+      # API 키 같은 값을 넣어 준다. .env는 깃에 올리지 않는다.
+      - .env
+
+    restart: unless-stopped       # 오류로 꺼지면 자동으로 다시 켠다
+
+  # ── 벡터DB (P4 보험 약관 RAG에서 쓸 예정) ────────────────
+  # 지금은 필요 없으니 주석 처리. 쓸 때가 되면 아래 # 를 지우면 된다.
+  #
+  # chroma:
+  #   image: chromadb/chroma:latest
+  #   container_name: triproll-chroma
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - chroma_data:/chroma/chroma
+
+# volumes:
+#   chroma_data:

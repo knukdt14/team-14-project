@@ -1,0 +1,10 @@
+# 앱 전체 테마. 카드 UI가 어두운 배경 기준이라 dark로 고정한다.
+[theme]
+base = "dark"
+primaryColor = "#E9B949"
+backgroundColor = "#0B0F1C"
+secondaryBackgroundColor = "#131A2E"
+textColor = "#EDEBE4"
+
+[server]
+runOnSave = true
