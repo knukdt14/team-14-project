@@ -11,7 +11,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
-import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
@@ -21,11 +20,12 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from services.planner_rag import RELATIONSHIP_KEYWORDS, build_search_query, rank_candidates  # noqa: E402
 from services.planner_schemas import TravelPlan, strict_response_format  # noqa: E402
 from services.tour_api import TourApiError, fetch_place_candidates  # noqa: E402
-from views._common import page_header, require_region, show_inherited  # noqa: E402
+from services.tmap_transit import TmapTransitError, fetch_air_travel_info  # noqa: E402
+from views._common import page_header, require_region  # noqa: E402
 
 
 RELATIONSHIPS = ["가족", "부부", "연인", "친구", "동료", "혼자"]
-TRANSPORT = ["자가용", "대중교통", "렌터카", "도보 중심"]
+TRANSPORT = ["자가용", "대중교통", "항공", "도보 중심"]
 STYLES = ["맛집", "관광", "자연", "문화·역사", "카페", "액티비티", "휴식", "아이 동반"]
 CATEGORIES = ["관광지", "음식점", "문화시설", "축제", "숙소", "기타"]
 
@@ -43,13 +43,13 @@ def _init(region: dict) -> None:
         "planner_departure": origin.get("name", "출발지 미입력"), "planner_transport": "자가용",
         "planner_budget": 300000, "planner_styles": ["맛집", "관광"], "planner_preferences": "",
         "planner_candidates": [], "planner_query": "", "planner_mode": "", "planner_llm": None,
-        "planner_itinerary": [], "planner_region_key": region["name"],
+        "planner_itinerary": [], "planner_flight_info": None, "planner_region_key": region["name"],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
     if st.session_state.planner_region_key != region["name"]:
-        for key in ("planner_candidates", "planner_query", "planner_mode", "planner_llm", "planner_itinerary"):
+        for key in ("planner_candidates", "planner_query", "planner_mode", "planner_llm", "planner_itinerary", "planner_flight_info"):
             st.session_state[key] = [] if key in ("planner_candidates", "planner_itinerary") else "" if key in ("planner_query", "planner_mode") else None
         st.session_state.planner_region_key = region["name"]
         st.session_state.planner_title = f"{region['name']} 여행"
@@ -63,7 +63,26 @@ def _profile(region: dict) -> dict:
         "nights": len(days) - 1, "days": len(days), "transportation": st.session_state.planner_transport,
         "budget_per_person": st.session_state.planner_budget, "styles": st.session_state.planner_styles,
         "preferences": st.session_state.planner_preferences,
+        "flight_operation": st.session_state.planner_flight_info,
     }
+
+
+def _load_flight_info(region: dict) -> None:
+    """Load only flight-route facts; the LLM must not invent flight details."""
+    st.session_state.planner_flight_info = None
+    if st.session_state.planner_transport != "항공":
+        return
+    origin = st.session_state.trip_context.get("origin", {})
+    try:
+        st.session_state.planner_flight_info = fetch_air_travel_info(
+            float(origin["latitude"]), float(origin["longitude"]),
+            float(region["latitude"]), float(region["longitude"]),
+            st.session_state.planner_start, os.getenv("TMAP_APP_KEY", ""),
+        )
+    except (KeyError, TypeError, ValueError):
+        st.session_state.planner_flight_info = {"available": False, "message": "출발지 좌표가 없어 항공 이동 경로를 조회하지 못했습니다."}
+    except TmapTransitError as error:
+        st.session_state.planner_flight_info = {"available": False, "message": str(error)}
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
@@ -96,11 +115,13 @@ def _prompt(region: dict, candidates: list[dict]) -> str:
     dates = [day.isoformat() for day in _days(st.session_state.planner_start, st.session_state.planner_end)]
     allowed = [{key: item.get(key) for key in ("content_id", "name", "category", "address", "latitude", "longitude", "overview", "event_start", "event_end")} for item in candidates]
     profile = _profile(region)
+    flight_rule = "항공편 정보가 없으면 항공편·공항·시간을 지어내지 말 것. 항공편 정보가 있으면 도착 시간 이후부터 첫날 일정을 시작할 것."
     return f"""당신은 국내 여행 동선 전문가입니다. 반드시 아래 TourAPI 후보만 사용해 JSON 스키마에 맞는 일정을 만드세요.
 여행 조건: {json.dumps(profile, ensure_ascii=False)}
 여행 날짜: {json.dumps(dates, ensure_ascii=False)}
 관계별 선호 키워드: {json.dumps(RELATIONSHIP_KEYWORDS.get(profile['relationship'], []), ensure_ascii=False)}
 TourAPI 후보: {json.dumps(allowed, ensure_ascii=False)}
+항공 이동 규칙: {flight_rule}
 규칙: 후보 밖의 장소를 지어내지 말 것. itinerary는 날짜 목록을 같은 순서로 정확히 한 번씩 모두 포함할 것. 가까운 장소를 묶고, 이동·식사·휴식과 1인 기준 추정비용을 반영할 것. 축제는 여행 기간과 겹칠 때만 사용한다."""
 
 
@@ -130,6 +151,7 @@ def _parse_llm_plan(content: str) -> TravelPlan:
 
 
 def _generate(region: dict) -> None:
+    _load_flight_info(region)
     if not st.session_state.planner_candidates:
         _retrieve(region)
     token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_API_TOKEN", "")
@@ -162,7 +184,9 @@ def _sync_context(region: dict) -> None:
         "title": st.session_state.planner_title, "destination": region["name"],
         "start_date": st.session_state.planner_start.isoformat(), "end_date": st.session_state.planner_end.isoformat(),
         "summary": (st.session_state.planner_llm or {}).get("summary", "직접 구성한 일정"),
-        "itinerary": items, "center": center, "retrieval_query": st.session_state.planner_query,
+        "itinerary": items, "center": center,
+        "transportation": st.session_state.planner_transport,
+        "flight_operation": st.session_state.planner_flight_info,
     }
 
 
@@ -187,7 +211,7 @@ def _profile_form() -> bool:
             budget = st.number_input("1인 예산(원)", 50000, 5000000, st.session_state.planner_budget, step=50000)
             styles = st.multiselect("여행 스타일", STYLES, default=st.session_state.planner_styles)
         preferences = st.text_area("추가 요청", st.session_state.planner_preferences, placeholder="예: 아이와 함께라 무리 없는 동선, 해산물 제외")
-        submitted = st.form_submit_button("여행 조건 적용", use_container_width=True)
+        submitted = st.form_submit_button("여행 조건 반영 및 AI 일정 생성", type="primary", use_container_width=True)
     if submitted:
         if end < start or (end - start).days > 13:
             st.error("여행 날짜는 시작일 이후이며 최대 14일이어야 합니다.")
@@ -196,14 +220,6 @@ def _profile_form() -> bool:
         st.success("여행 조건을 적용했습니다.")
         return True
     return False
-
-
-def _show_candidates() -> None:
-    if st.session_state.planner_candidates:
-        label = "임베딩 검색" if st.session_state.planner_mode == "embedding" else "키워드 보조 검색"
-        with st.expander(f"TourAPI 검색 근거 · {label}"):
-            st.caption(f"검색어: {st.session_state.planner_query}")
-            st.dataframe(pd.DataFrame(st.session_state.planner_candidates)[["name", "category", "address", "retrieval_score"]], hide_index=True, use_container_width=True)
 
 
 def _show_plan(region: dict) -> None:
@@ -218,9 +234,16 @@ def _show_plan(region: dict) -> None:
                 st.markdown(f"**{item['time']} · {item['name']}**")
                 st.caption(f"{item['category']} · 이전 장소에서 {item['travel_minutes_from_previous']}분 · {item['estimated_cost']:,}원 · {item['address']}")
                 st.write(item["memo"])
-    if st.button("AI 일정을 내 플래너에 적용", type="primary", use_container_width=True):
+    flight_info = st.session_state.planner_flight_info
+    if flight_info and st.session_state.planner_transport == "항공":
+        if flight_info.get("available"):
+            flight = flight_info["flights"][0]
+            st.info(f"TMAP 항공 이동 반영: {flight['departure']} → {flight['arrival']} · 약 {flight.get('minutes') or '-'}분")
+        else:
+            st.warning(f"TMAP 항공 이동 정보: {flight_info.get('message')}")
+    if st.button("일정 적용 후 주변 숙소로 이동", type="primary", use_container_width=True):
         _apply_plan(region)
-        st.rerun()
+        st.switch_page("views/page3_lodging.py")
 
 
 def _manual(region: dict, days: list[date]) -> None:
@@ -258,18 +281,21 @@ def _saved(region: dict, days: list[date]) -> None:
                     st.session_state.planner_itinerary = [saved for saved in st.session_state.planner_itinerary if saved["id"] != item["id"]]
                     _sync_context(region)
                     st.rerun()
+    if st.button("주변 숙소로 이동", type="primary", use_container_width=True):
+        _sync_context(region)
+        st.switch_page("views/page3_lodging.py")
 
 
 page_header("여행 플래너", "P1에서 확정한 여행지의 실제 TourAPI 장소만 골라 AI가 날짜별 일정을 구성합니다.")
 region = require_region()
 if region:
     _init(region)
-    show_inherited(region)
+    st.info(f"선택 여행지: **{region['name']}** · 출발지에서 약 {region['distance_km']}km")
     st.caption(f"목적지 연동: 랜덤 목적지 선정(P1) · **{region['name']}**")
-    _profile_form()
+    generate_requested = _profile_form()
     days = _days(st.session_state.planner_start, st.session_state.planner_end)
     st.info(f"{st.session_state.planner_departure} 출발 · {len(days)-1}박 {len(days)}일 · {st.session_state.planner_count}명 {st.session_state.planner_relationship} 여행")
-    if st.button("TourAPI 검색 후 AI 일정 생성", type="primary", use_container_width=True):
+    if generate_requested:
         try:
             with st.spinner("TourAPI 조회 → 장소 설명 임베딩 검색 → LLM 일정 생성 중입니다..."):
                 _generate(region)
@@ -278,16 +304,9 @@ if region:
             st.error(f"일정 생성에 실패했습니다: {error}")
         except Exception as error:
             st.error(f"예상하지 못한 API 오류가 발생했습니다: {error}")
-    _show_candidates()
     _show_plan(region)
     _manual(region, days)
     _saved(region, days)
     # P3는 실제 일정이 만들어진 뒤에만 plan 컨텍스트를 받는다.
     if st.session_state.planner_itinerary:
         _sync_context(region)
-    export = {
-        "title": st.session_state.planner_title, "destination": region["name"],
-        "start_date": st.session_state.planner_start.isoformat(), "end_date": st.session_state.planner_end.isoformat(),
-        "itinerary": st.session_state.planner_itinerary, "retrieval_query": st.session_state.planner_query,
-    }
-    st.download_button("JSON으로 일정 저장", json.dumps(export, ensure_ascii=False, indent=2), f"{region['name']}_travel_plan.json", "application/json", use_container_width=True)
