@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Flask (flask_app/) — 서버 사이드 세션 파일
+.flask_session/
