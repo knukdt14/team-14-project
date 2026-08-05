@@ -10,5 +10,5 @@ pip install -r requirements.txt
 echo.
 echo ====================================
 echo  설치 완료
-echo  실행: streamlit run pages/1_여행지_추첨.py
+echo  실행: streamlit run .py
 echo ====================================
