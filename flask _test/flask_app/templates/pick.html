@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}여행지 추첨 · TripRoll{% endblock %}
+{% block content %}
+<div class="page-title">여행지 추첨</div>
+<div class="page-sub">고민은 여기까지. 조건만 정하면 갈 곳은 카드가 정해 줍니다.</div>
+
+<div class="panel">
+  <form method="get" action="{{ url_for('pick.index') }}">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="origin">출발지</label>
+        <select id="origin" name="origin">
+          {% for n in names %}
+            <option value="{{ n }}" {{ 'selected' if n == filters.origin_name else '' }}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="distance">이동 거리 상한</label>
+        <select id="distance" name="distance">
+          {% for d in distance_options %}
+            <option value="{{ d }}" {{ 'selected' if d == filters.distance else '' }}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <label class="checkbox-row"><input type="checkbox" name="coastal" value="1" {{ 'checked' if filters.coastal_only else '' }}> 바다 있는 곳만</label>
+      <label class="checkbox-row"><input type="checkbox" name="exclude_metro" value="1" {{ 'checked' if filters.exclude_metro else '' }}> 광역시 제외</label>
+    </div>
+    <hr class="divider">
+    <div class="form-row" style="align-items:center; justify-content:space-between;">
+      {% if pool_count < 3 %}
+        <span>후보가 <strong>{{ pool_count }}곳</strong>뿐입니다. 조건을 조금 풀어 주세요.</span>
+      {% else %}
+        <span>조건에 맞는 여행지 <strong>{{ pool_count }}곳</strong>에서 3장을 뽑습니다.</span>
+      {% endif %}
+      <div style="display:flex; gap:8px;">
+        <button type="submit" class="btn btn-outline">조건 적용</button>
+        <button type="submit" formmethod="post" formaction="{{ url_for('pick.draw') }}" class="btn btn-primary" {{ 'disabled' if not can_draw else '' }}>카드 뽑기</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% if confirmed %}
+  {% set r = confirmed.region %}
+  {% set lat = confirmed.point[0] %}
+  {% set lng = confirmed.point[1] %}
+  <div class="confirmed-panel">
+    <div class="label">이번 여행지</div>
+    <div class="place">{{ r.name }}</div>
+    <div class="note">
+      출발지에서 약 {{ r.distance_km|int }}km · 좌표 {{ lat }}, {{ lng }}<br>
+      여행지는 여기서 확정됩니다. 다음 페이지에서는 변경할 수 없습니다.
+    </div>
+  </div>
+  <p style="text-align:center; margin-top:14px;">
+    <a href="https://map.kakao.com/link/map/{{ r.name }},{{ lat }},{{ lng }}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">🗺️ 카카오맵에서 위치 보기</a>
+  </p>
+  <div class="form-row" style="margin-top:18px;">
+    <form method="post" action="{{ url_for('pick.restart') }}" style="flex:1;">
+      <button type="submit" class="btn btn-outline btn-block">처음부터 다시</button>
+    </form>
+    <form method="get" action="{{ url_for('planner.index') }}" style="flex:1;">
+      <button type="submit" class="btn btn-primary btn-block">여행 플래너로 이동</button>
+    </form>
+  </div>
+
+{% elif not cards %}
+  <div class="panel empty-state">위에서 조건을 정하고 <strong>카드 뽑기</strong>를 눌러 주세요.</div>
+
+{% else %}
+  <div class="grid">
+    {% for card in cards %}
+      {% set r = card.region %}
+      {% if not card.opened %}
+        <form method="post" action="{{ url_for('pick.open_card', idx=loop.index0) }}">
+          {% include "partials/pick_filter_hidden.html" %}
+          <button type="submit" class="pick-card pick-card-back" style="width:100%; border:none; cursor:pointer;">
+            <div class="mark">?</div>
+            <div class="hint">눌러서 열기</div>
+          </button>
+        </form>
+      {% else %}
+        {% set grade = card.grade %}
+        {% set g = grade_colors.get(grade) %}
+        <div class="pick-card pick-card-front" style="--g:{{ g }};">
+          <div class="pick-grade">{{ grade }}</div>
+          {% if not r.metro %}<div class="pick-sido">{{ r.sido }}</div>{% endif %}
+          <div class="pick-name">{{ r.sigungu }}</div>
+          <div class="pick-meta">출발지에서 약 {{ r.distance_km|int }}km</div>
+          <div class="pick-tags">
+            {% if r.coastal %}<span class="pick-tag">바다</span>{% endif %}
+            {% if r.metro %}<span class="pick-tag">도시</span>{% endif %}
+            <span class="pick-tag">{{ grade }}</span>
+          </div>
+          <div class="pick-card-actions">
+            <form method="post" action="{{ url_for('pick.reroll', idx=loop.index0) }}" style="flex:1;">
+              {% include "partials/pick_filter_hidden.html" %}
+              <button type="submit" class="btn btn-outline btn-sm btn-block" {{ 'disabled' if card.rerolled else '' }}>{{ '리롤 완료' if card.rerolled else '다시 뽑기' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('pick.confirm', idx=loop.index0) }}" style="flex:1;">
+              {% include "partials/pick_filter_hidden.html" %}
+              <button type="submit" class="btn btn-primary btn-sm btn-block">이걸로 결정</button>
+            </form>
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

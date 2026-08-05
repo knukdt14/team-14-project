@@ -8,6 +8,13 @@ numpy>=1.26
 huggingface_hub>=0.30
 pydantic>=2.7
 torch>=2.7
+pydeck>=0.9
+
+# P4 여행자 보험 약관 RAG 챗봇 (rag_chain.py, clause_matcher.py, query_pipeline.py)
+chromadb>=0.5
+sentence-transformers>=3.0
+langchain-core>=0.3
+langchain-upstage>=0.5
 
 # Flask 버전(flask_app/) 전용 — 기존 Streamlit 앱과는 무관
 flask>=3.1
