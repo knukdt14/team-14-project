@@ -7,4 +7,3 @@ altair>=5.0
 numpy>=1.26
 huggingface_hub>=0.30
 pydantic>=2.7
-python-dotenv>=1.0
