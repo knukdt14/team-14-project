@@ -18,7 +18,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from views._common import page_header, require_region, show_inherited  # noqa: E402
+from views._common import page_header, require_region  # noqa: E402
 
 load_dotenv()
 
@@ -255,6 +255,11 @@ def render_result_card(place: dict) -> None:
     is_selected = st.session_state.trip_context.get("lodging", {}).get("name") == name
 
     icon = TYPE_ICONS.get(lodging_type, "📍")
+    selected_badge = (
+        '<span class="stay-selected">✓ 이번 여행 숙소</span>' if is_selected else ""
+    )
+    # 마크다운은 빈 줄을 만나면 이어지던 raw HTML 블록을 끊고 뒷부분을 코드블록으로
+    # 취급해버리므로, 조건부 뱃지는 반드시 앞 태그와 같은 줄에 붙여야 한다.
     st.markdown(
         f"""
         <div class="stay-card">
@@ -263,8 +268,7 @@ def render_result_card(place: dict) -> None:
                 <div class="stay-info">
                     <div class="stay-name-row">
                         <span class="stay-name">{name}</span>
-                        <span class="stay-badge" style="background:{badge_color};">{lodging_type}</span>
-                        {'<span class="stay-selected">✓ 이번 여행 숙소</span>' if is_selected else ''}
+                        <span class="stay-badge" style="background:{badge_color};">{lodging_type}</span>{selected_badge}
                     </div>
                     <div class="stay-address">{address}</div>
                 </div>
@@ -288,7 +292,7 @@ def render_result_card(place: dict) -> None:
         select_label, key=f"select_{fav_key}", type="primary" if not is_selected else "secondary"
     ):
         select_lodging(place, lodging_type, address)
-        st.rerun()
+        st.switch_page("views/page4_insurance.py")
 
 
 def render_summary(places: list[dict]) -> None:
@@ -353,9 +357,6 @@ page_header(
 
 region = require_region()
 if region:
-    show_inherited(region)
-    st.write("")
-
     if not st.session_state.trip_context.get("plan"):
         st.info("일정이 아직 없습니다. 일정을 먼저 만들면 동선 기준 정렬을 쓸 수 있습니다.")
 
@@ -374,7 +375,9 @@ if region:
     render_sidebar()
 
     if "location_input" not in st.session_state:
+        # 이 페이지에 처음 들어왔을 때는 이미 확정된 여행지 위치로 바로 검색해 준다.
         st.session_state["location_input"] = region["name"]
+        st.session_state["search_trigger"] = True
 
     if "radius_override" in st.session_state:
         st.session_state["radius_choice"] = st.session_state.pop("radius_override")
