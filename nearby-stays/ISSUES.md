@@ -32,3 +32,26 @@
   잡혀 정상적으로 좌표를 구함.
 - **교훈**: 사용자가 입력할 위치는 정확한 지번 주소일 수도, 관광지/건물 이름일 수도 있으므로
   처음부터 "주소 검색 → 실패 시 키워드 검색" 2단계 폴백을 넣어둔 게 유효했다.
+
+## 0003. 요약 지표(최단/평균 거리) 계산 시 `TypeError: unsupported operand type(s) for +: 'int' and 'str'`
+
+- **서비스 / 단계**: nearby-stays, 기능 업그레이드(유형 필터·요약 지표·정렬) 추가 후 실사용 테스트
+- **증상**:
+  ```
+  File "src/app.py", line 243, in render_summary
+      "평균 거리", f"{int(sum(distances) / len(distances)):,} m" if distances else "-"
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+  ```
+- **원인**: 카카오 카테고리 검색 API가 응답의 `distance` 필드를 **숫자가 아니라 문자열**
+  (`"132"`)로 내려준다. 카드 UI에서는 `int(distance_m)`로 매번 형변환해서 우연히
+  문제가 없었지만, 새로 추가한 `render_summary()`의 `sum(distances)`는 문자열 리스트를
+  그대로 더하려다 실패했다(`sum()`은 시작값 `0`(int)에 문자열을 더하려 시도).
+  같은 이유로 `filtered.sort(key=lambda p: p.get("distance") or 0)`도 값이 섞이면
+  (문자열 vs int) 정렬 비교에서 터질 수 있는 잠재 버그였다.
+- **해결**: API 응답을 받는 지점(`search_nearby_lodging`)에서 각 place의 `distance`를
+  즉시 `int`로 정규화하도록 수정. 이후 카드 렌더링/요약 지표/정렬 등 모든 소비처가
+  항상 `int | None`만 다루도록 통일.
+- **교훈**: 외부 API 응답 필드의 실제 타입을 가정하지 말고, **데이터를 받는 지점에서
+  한 번만 정규화**해서 이후 로직 전체가 일관된 타입을 다루게 하는 게 안전하다.
+  화면 표시 코드마다 개별적으로 `int()`를 흩뿌려 놓으면 한 곳이라도 빠뜨렸을 때
+  이런 버그가 재발한다.

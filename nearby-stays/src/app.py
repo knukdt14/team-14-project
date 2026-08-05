@@ -146,6 +146,12 @@ def search_nearby_lodging(
         if payload.get("meta", {}).get("is_end", True):
             break
 
+    # 카카오 API는 distance를 문자열로 내려주므로, 이후 정렬/합산 연산이
+    # 깨지지 않도록 여기서 한 번에 int로 정규화한다.
+    for place in results:
+        raw_distance = place.get("distance")
+        place["distance"] = int(raw_distance) if raw_distance not in (None, "") else None
+
     return results
 
 
