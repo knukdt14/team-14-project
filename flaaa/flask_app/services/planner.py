@@ -173,7 +173,18 @@ def parse_llm_plan(content: str) -> TravelPlan:
         data = json.loads(payload)
     except json.JSONDecodeError:
         repaired = _repair_json(re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", payload))
-        data = json.loads(repaired)
+        # The model occasionally omits a separator between completed JSON
+        # values. json.JSONDecodeError gives the exact insertion point.
+        for _ in range(3):
+            try:
+                data = json.loads(repaired)
+                break
+            except json.JSONDecodeError as error:
+                if "Expecting ',' delimiter" not in error.msg or error.pos >= len(repaired):
+                    raise
+                repaired = repaired[:error.pos] + "," + repaired[error.pos:]
+        else:
+            data = json.loads(repaired)
     return TravelPlan.model_validate(data)
 
 
