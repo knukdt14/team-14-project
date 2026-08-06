@@ -68,6 +68,85 @@ flowchart LR
 - 카드 3장을 터치해 오픈, 마음에 안 들면 카드당 1회 리롤
 - 출발지 거리 상한 / 바다 인접 지역만 / 광역시 제외 필터
 
+
+TripRoll — P1 여행지 추첨
+실행
+bash
+python -m venv .venv
+.venv\Scripts\activate          # Mac/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+streamlit run app.py
+
+app.py가 진입점입니다. 개별 페이지 파일을 직접 실행하지 마세요.
+
+폴더 구조
+triproll/
+├── app.py                    # 진입점 · 사이드바 네비게이션 · 공통 스타일
+├── views/
+│   ├── _common.py            # 페이지 공용 도구 (헤더 · 상태 확인 · 안내판)
+│   ├── page1_pick.py         # P1 여행지 추첨  ← 완성
+│   ├── page2_planner.py      # P2 여행 플래너  (자리만)
+│   ├── page3_lodging.py      # P3 주변 숙소    (자리만)
+│   └── page4_insurance.py    # P4 여행자 보험  (자리만)
+├── services/
+│   └── geo.py                # 지역 로드 · 거리 · 필터 · 무작위 좌표
+├── data/
+│   └── sigungu.csv           # 시군구 161곳
+├── .streamlit/config.toml    # 다크 테마
+└── requirements.txt
+팀원에게
+
+각 페이지 파일에 담당 축과 할 일 목록이 적혀 있습니다. todo_panel(...) 부분을 지우고 실제 화면을 채우면 됩니다.
+
+주고받는 값은 st.session_state.trip_context 하나입니다.
+
+python
+# P1이 채우는 값
+trip_context["region"] = {
+    "sido": "충청남도", "sigungu": "부여군", "name": "충남 부여군",
+    "latitude": 36.27521, "longitude": 126.8811,
+    "distance_km": 158, "locked": True,
+}
+trip_context["origin"] = {"name": "대구", "latitude": 35.872, "longitude": 128.601}
+
+# 각자 채울 값
+trip_context["plan"]      = {...}   # P2 → P3가 동선 정렬에 사용
+trip_context["lodging"]   = {...}   # P3
+trip_context["insurance"] = {...}   # P4
+
+페이지 상단에서 require_region()을 부르면 여행지 확정 여부를 자동으로 확인해 줍니다.
+
+SGIS 실제 경계 붙이기
+
+지금은 대표 좌표 주변에서 좌표를 뽑습니다. 실제 시군구 경계 안에서 뽑으려면 GeoJSON을 아래 경로에 넣기만 하면 됩니다. 코드 수정은 필요 없습니다.
+
+data/sgis/sigungu.geojson
+출처: 통계청 SGIS (공공누리 1유형) 또는 vuski/admdongkor (CC BY 4.0)
+속성에 SIG_KOR_NM(시군구명)이 있어야 자동 인식됩니다.
+파일이 있으면 point-in-polygon 방식으로 전환됩니다.
+뽑는 방식 두 가지
+
+조건 패널 아래 세그먼트로 고릅니다. 어느 쪽으로 정하든 결과는 같은 자리에 기록됩니다.
+
+모드	방식	다시 하기
+카드 뽑기	무작위 3곳을 카드로 받아 하나 선택	카드당 1회
+다트 던지기	전국 지도에 다트가 꽂힌 곳으로 결정	전체 1회
+
+다트 지도는 별도 지도 파일 없이 시군구 161곳의 위경도를 점으로 찍어 그립니다. 밝은 점이 조건을 통과한 후보, 어두운 점이 걸러진 지역입니다.
+
+두 모드는 세션 상태를 따로 씁니다(cards / dart). 모드를 오가도 각자 상태가 남고, 확정 결과만 confirmed 한 곳에 모입니다.
+
+카드 등급
+
+등급은 장식이 아니라 출발지에서의 거리입니다.
+
+등급	거리	색
+가벼움	~100km	회색
+괜찮음	~200km	청록
+본격적	~320km	보라
+대장정	320km~	금색
+
+
 **2. 여행 플래너**
 - 입력: 인원 · 관계 · 날짜 · 출발지 · 예산 · 이동수단 · 취향
 - 관계별 키워드 확장 (연인 → 카페·야경·포토스팟)
