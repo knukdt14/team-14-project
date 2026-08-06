@@ -11,7 +11,7 @@
 
 <div class="search-float">
 <div class="panel">
-  <form method="get" action="{{ url_for('pick.index') }}">
+  <form method="get" action="{{ url_for('pick.index') }}" id="pick-filter-form">
     <input type="hidden" name="mode" value="{{ mode }}">
     <div class="form-row">
       <div class="form-group">
@@ -32,7 +32,11 @@
       </div>
     </div>
     <div class="form-row">
+      {# 체크 해제된 checkbox는 브라우저가 전송하지 않는다. 앞에 hidden "0"을
+         깔아 두면 항상 값이 실려서, 껐다 켜는 토글처럼 동작한다. #}
+      <input type="hidden" name="coastal" value="0">
       <label class="chip-checkbox"><input type="checkbox" name="coastal" value="1" {{ 'checked' if filters.coastal_only else '' }}><span>🌊 바다 있는 곳만</span></label>
+      <input type="hidden" name="exclude_metro" value="0">
       <label class="chip-checkbox"><input type="checkbox" name="exclude_metro" value="1" {{ 'checked' if filters.exclude_metro else '' }}><span>🏙️ 광역시 제외</span></label>
     </div>
     <div class="pill-group" style="margin:14px 0 2px;">
@@ -134,43 +138,14 @@
 
 {% else %}
   <div class="section-heading">🎴 뽑힌 여행지 카드</div>
-  <div class="grid">
+  <div class="grid" id="pick-grid">
     {% for card in cards %}
-      {% set r = card.region %}
-      {% if not card.opened %}
-        <form method="post" action="{{ url_for('pick.open_card', idx=loop.index0) }}">
-          {% include "partials/pick_filter_hidden.html" %}
-          <button type="submit" class="pick-card pick-card-back" style="width:100%; border:none; cursor:pointer;">
-            <div class="mark">?</div>
-            <div class="hint">눌러서 열기</div>
-          </button>
-        </form>
-      {% else %}
-        {% set grade = card.grade %}
-        {% set g = grade_colors.get(grade) %}
-        <div class="pick-card pick-card-front" style="--g:{{ g }};">
-          <div class="pick-grade">{{ grade }}</div>
-          {% if not r.metro %}<div class="pick-sido">{{ r.sido }}</div>{% endif %}
-          <div class="pick-name">{{ r.sigungu }}</div>
-          <div class="pick-meta">출발지에서 약 {{ r.distance_km|int }}km</div>
-          <div class="pick-tags">
-            {% if r.coastal %}<span class="pick-tag">바다</span>{% endif %}
-            {% if r.metro %}<span class="pick-tag">도시</span>{% endif %}
-            <span class="pick-tag">{{ grade }}</span>
-          </div>
-          <div class="pick-card-actions">
-            <form method="post" action="{{ url_for('pick.reroll', idx=loop.index0) }}" style="flex:1;">
-              {% include "partials/pick_filter_hidden.html" %}
-              <button type="submit" class="btn btn-outline btn-sm btn-block" {{ 'disabled' if card.rerolled else '' }}>{{ '리롤 완료' if card.rerolled else '다시 뽑기' }}</button>
-            </form>
-            <form method="post" action="{{ url_for('pick.confirm', idx=loop.index0) }}" style="flex:1;">
-              {% include "partials/pick_filter_hidden.html" %}
-              <button type="submit" class="btn btn-primary btn-sm btn-block">이걸로 결정</button>
-            </form>
-          </div>
-        </div>
-      {% endif %}
+      <div class="pick-slot" data-idx="{{ loop.index0 }}">
+        {% with idx = loop.index0 %}{% include "partials/pick_card.html" %}{% endwith %}
+      </div>
     {% endfor %}
   </div>
 {% endif %}
+
+<script src="{{ url_for('static', filename='js/pick.js') }}"></script>
 {% endblock %}
