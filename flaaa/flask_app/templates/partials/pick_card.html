@@ -1,0 +1,38 @@
+{# 카드 한 장. 전체 렌더와 AJAX 응답(부분 갱신)이 같은 파일을 쓴다.
+   필요한 컨텍스트: card, idx, filters, grade_colors #}
+{% set r = card.region %}
+{% if not card.opened %}
+  <form method="post" action="{{ url_for('pick.open_card', idx=idx) }}" data-card-action="open">
+    {% include "partials/pick_filter_hidden.html" %}
+    <button type="submit" class="pick-card pick-card-back" aria-label="카드 열기">
+      <span class="pick-card-glow" aria-hidden="true"></span>
+      <span class="pick-card-sheen" aria-hidden="true"></span>
+      <span class="mark">?</span>
+      <span class="hint">눌러서 열기</span>
+    </button>
+  </form>
+{% else %}
+  {% set grade = card.grade %}
+  {% set g = grade_colors.get(grade) %}
+  <div class="pick-card pick-card-front" style="--g:{{ g }};">
+    <div class="pick-grade">{{ grade }}</div>
+    {% if not r.metro %}<div class="pick-sido">{{ r.sido }}</div>{% endif %}
+    <div class="pick-name">{{ r.sigungu }}</div>
+    <div class="pick-meta">출발지에서 약 {{ r.distance_km|int }}km</div>
+    <div class="pick-tags">
+      {% if r.coastal %}<span class="pick-tag">바다</span>{% endif %}
+      {% if r.metro %}<span class="pick-tag">도시</span>{% endif %}
+      <span class="pick-tag">{{ grade }}</span>
+    </div>
+    <div class="pick-card-actions">
+      <form method="post" action="{{ url_for('pick.reroll', idx=idx) }}" data-card-action="reroll" style="flex:1;">
+        {% include "partials/pick_filter_hidden.html" %}
+        <button type="submit" class="btn btn-outline btn-sm btn-block" {{ 'disabled' if card.rerolled else '' }}>{{ '리롤 완료' if card.rerolled else '다시 뽑기' }}</button>
+      </form>
+      <form method="post" action="{{ url_for('pick.confirm', idx=idx) }}" style="flex:1;">
+        {% include "partials/pick_filter_hidden.html" %}
+        <button type="submit" class="btn btn-primary btn-sm btn-block">이걸로 결정</button>
+      </form>
+    </div>
+  </div>
+{% endif %}

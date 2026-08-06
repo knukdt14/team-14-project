@@ -8,7 +8,17 @@ Streamlit 버전(views/page1_pick.py)과 달리 필터(출발지/거리/조건)�
 없어서, 뽑았을 때의 조건과 리롤/확정 시점의 조건이 항상 일치한다.
 """
 
-from flask import Blueprint, flash, redirect, render_template, request, send_file, session, url_for
+from flask import (
+    Blueprint,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 
 from flask_app.state import set_trip_context_value
 from services import geo
@@ -34,6 +44,19 @@ def _boundaries():
     return geo.load_boundaries()
 
 
+def _flag(source, key: str, default: bool) -> bool:
+    """체크박스 값 읽기.
+
+    체크가 풀린 checkbox는 브라우저가 아예 안 보낸다 — 그래서 폼에는 같은 이름의
+    hidden "0"을 앞에 하나 깔아 뒀다. 체크됨이면 ["0", "1"], 해제됨이면 ["0"]이
+    오므로 마지막 값이 실제 상태다. 파라미터 자체가 없으면(첫 진입) 기본값.
+    """
+    values = source.getlist(key)
+    if not values:
+        return default
+    return values[-1] == "1"
+
+
 def _filters(source) -> dict:
     """source는 request.args(GET) 또는 request.form(POST)."""
     regions = _regions()
@@ -44,8 +67,8 @@ def _filters(source) -> dict:
     distance = source.get("distance") or "300km"
     if distance not in DISTANCE_OPTIONS:
         distance = "300km"
-    coastal_only = source.get("coastal") == "1"
-    exclude_metro = source.get("exclude_metro", "1") == "1"
+    coastal_only = _flag(source, "coastal", False)
+    exclude_metro = _flag(source, "exclude_metro", True)
     return {
         "origin_name": origin_name,
         "distance": distance,
@@ -76,6 +99,42 @@ def _filter_qs(filters: dict) -> str:
     )
 
 
+def _dart_view(dart: dict, pool) -> dict:
+    """세션에 저장된 착지 지점을 지금 필터(pool) 기준으로 다시 판정한다.
+
+    조건을 바꾸면 결과도 같이 바뀌어야 한다 — 던진 순간의 판정을 세션에
+    굳혀 두면 "광역시 제외"를 꺼도 아까 뜬 '조건 밖'이 그대로 남는다.
+    """
+    name = dart.get("name")
+    region = None
+    if name:
+        matched = pool[pool["name"] == name]
+        if len(matched):
+            region = matched.iloc[0].to_dict()
+    return {
+        "point": dart.get("point"),
+        "name": name,
+        "region": region,
+        "grade": geo.grade_of(region["distance_km"]) if region else None,
+        "land": name if region is None else None,
+    }
+
+
+def _wants_fragment() -> bool:
+    """카드 한 장만 갈아끼우는 fetch 요청인지."""
+    return request.headers.get("X-Requested-With") == "fetch"
+
+
+def _card_fragment(card: dict, idx: int, filters: dict) -> str:
+    return render_template(
+        "partials/pick_card.html",
+        card=card,
+        idx=idx,
+        filters=filters,
+        grade_colors=GRADE_COLORS,
+    )
+
+
 def _make_card(region: dict, boundaries: dict) -> dict:
     lat, lng = geo.pick_point(region, boundaries)
     return {
@@ -99,7 +158,9 @@ def index():
 
     cards = session.get("cards", [])
     confirmed = session.get("confirmed")
-    dart = session.get("dart")
+
+    stored_dart = session.get("dart")
+    dart = _dart_view(stored_dart, pool) if stored_dart else None
 
     return render_template(
         "pick.html",
@@ -149,10 +210,17 @@ def draw():
 def open_card(idx: int):
     filters = _filters(request.form)
     cards = session.get("cards", [])
-    if 0 <= idx < len(cards):
+    found = 0 <= idx < len(cards)
+    if found:
         cards[idx]["opened"] = True
         session["cards"] = cards
         session.modified = True
+
+    if _wants_fragment():
+        if not found:
+            return jsonify({"message": "카드를 찾을 수 없습니다. 다시 뽑아 주세요."}), 404
+        return jsonify({"html": _card_fragment(cards[idx], idx, filters)})
+
     return redirect(url_for("pick.index") + _filter_qs(filters))
 
 
@@ -163,11 +231,12 @@ def reroll(idx: int):
     boundaries = _boundaries()
     cards = session.get("cards", [])
 
+    message = None
     if 0 <= idx < len(cards) and not cards[idx]["rerolled"]:
         used = [c["region"]["name"] for c in cards]
         fresh = geo.draw_regions(pool, count=1, exclude_names=used)
         if not fresh:
-            flash("더 뽑을 지역이 없습니다.", "warning")
+            message = "더 뽑을 지역이 없습니다."
         else:
             new_card = _make_card(fresh[0].to_dict(), boundaries)
             new_card["opened"] = True
@@ -176,6 +245,14 @@ def reroll(idx: int):
             session["cards"] = cards
             session.modified = True
 
+    if _wants_fragment():
+        payload = {"message": message}
+        if 0 <= idx < len(cards):
+            payload["html"] = _card_fragment(cards[idx], idx, filters)
+        return jsonify(payload)
+
+    if message:
+        flash(message, "warning")
     return redirect(url_for("pick.index") + _filter_qs(filters))
 
 
@@ -221,7 +298,6 @@ def confirm(idx: int):
 @pick_bp.route("/dart/throw", methods=["POST"])
 def dart_throw():
     filters = _filters(request.form)
-    _, pool = _pool(filters)
 
     try:
         x = float(request.form["x"])
@@ -232,17 +308,9 @@ def dart_throw():
     name = request.form.get("name") or None
     lat, lng = from_canvas(x, y)
 
-    region = None
-    matched = pool[pool["name"] == name] if name else pool.iloc[0:0]
-    if len(matched):
-        region = matched.iloc[0].to_dict()
-
-    session["dart"] = {
-        "point": [lat, lng],
-        "region": region,
-        "grade": geo.grade_of(region["distance_km"]) if region else None,
-        "land": name if region is None else None,
-    }
+    # 판정 결과가 아니라 "어디에 꽂혔는지"만 남긴다. 조건이 바뀌면 렌더할 때
+    # _dart_view()가 현재 pool 기준으로 다시 판단한다.
+    session["dart"] = {"point": [lat, lng], "name": name}
     session.modified = True
     return redirect(url_for("pick.index") + _filter_qs(filters) + "&mode=dart")
 
@@ -257,11 +325,13 @@ def dart_retry():
 @pick_bp.route("/dart/confirm", methods=["POST"])
 def dart_confirm():
     filters = _filters(request.form)
-    origin_row, _ = _pool(filters)
-    dart = session.get("dart")
+    origin_row, pool = _pool(filters)
+    stored_dart = session.get("dart")
 
-    if dart and dart.get("region"):
-        _confirm_pick(dart, origin_row)
+    if stored_dart:
+        dart = _dart_view(stored_dart, pool)
+        if dart["region"]:
+            _confirm_pick(dart, origin_row)
 
     return redirect(url_for("pick.index") + _filter_qs(filters))
 
