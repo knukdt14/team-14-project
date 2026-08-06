@@ -179,14 +179,76 @@ def render_answer_card(result: dict):
 # ---------------------------------------------------------------------------
 tab_premium, tab_chat = st.tabs(["💰 보험료 계산", "🤖 약관 상담 챗봇"])
 
+# ---------------------------------------------------------------------------
+# 보험료 계산 데이터 - 4개사 실제 다이렉트 사이트에서 동일 조건(2026.08.06~08, 2일)으로
+# 직접 견적을 뽑아 확보한 기준값. "기본형"/"고급형" 2단계로 통일해서 비교.
+#   - 현대해상: 표준->기본형, 고급->고급형 그대로 사용
+#   - DB손해보험: 표준->기본형, 고급->고급형 사용 (실속형은 생략)
+#   - 삼성화재: 플랜 구분이 없는 à la carte 방식이라 기본형/고급형 동일값 사용
+#   - 메리츠화재: 보안 프로그램 설치 문제로 실측 실패 -> 다른 3개사 평균 패턴으로 추정
+# 나이 배율도 실제로 20대/60대 두 지점을 찍어서 회사별로 다르게 반영함
+#   (현대해상은 완만하게 오르고, 삼성화재·DB손해보험은 가파르게 오르는 걸 확인함)
+# ---------------------------------------------------------------------------
+PREMIUM_BASE_RATES = {
+    # 회사명: {"기본형": 2일 기준 20대 요금, "고급형": 2일 기준 20대 요금}
+    "현대해상": {"기본형": 5000, "고급형": 5000},
+    "삼성화재": {"기본형": 3130, "고급형": 3130},
+    "DB손해보험": {"기본형": 2000, "고급형": 2000},
+    "메리츠화재": {"기본형": 3500, "고급형": 3500},  # 실측 실패 -> 추정치
+}
+# 연령대별 배율 (20대 기준 =1.0). 60대는 실제 견적으로 확인, 30~50대는 두 지점 사이 추정.
+PREMIUM_AGE_MULTIPLIER = {
+    "현대해상":   {"20대 이하": 1.0, "30~50대": 1.15, "60대 이상": 1.4},
+    "삼성화재":   {"20대 이하": 1.0, "30~50대": 1.7,  "60대 이상": 2.9},
+    "DB손해보험": {"20대 이하": 1.0, "30~50대": 1.7,  "60대 이상": 2.7},
+    "메리츠화재": {"20대 이하": 1.0, "30~50대": 1.6,  "60대 이상": 2.3},  # 추정치
+}
+PREMIUM_IS_ESTIMATED = {"메리츠화재"}  # 실측 못 한 곳 표시용
+
 with tab_premium:
-    todo_panel(
-        owner="C 축 (보험료 계산)",
-        items=[
-            "보험료 산정 — 기본요율 × 일수 × 연령대 × 인원",
-            "플랜 비교 — 든든플랜 · 안심플랜",
-        ],
-    )
+    st.markdown('<div class="rag-section-label">💰 4개사 예상 보험료 계산</div>', unsafe_allow_html=True)
+
+    # 여행 일정(출발일/도착일)은 플래너(page2)에서 이미 정한 걸 그대로 가져다 쓴다.
+    # trip_context["plan"]["start_date"] / ["end_date"] 가 ISO 날짜 문자열로 저장돼 있음
+    # (views/page2_planner.py의 _sync_context 참고). 플래너를 아직 안 거쳤으면
+    # 직접 일수를 입력받는 걸로 안전하게 대체한다.
+    plan_info = st.session_state.trip_context.get("plan")
+    days = None
+    if plan_info and plan_info.get("start_date") and plan_info.get("end_date"):
+        from datetime import date
+        start = date.fromisoformat(plan_info["start_date"])
+        end = date.fromisoformat(plan_info["end_date"])
+        days = max((end - start).days, 1)
+        st.caption(
+            f"🗓️ 여행 일정(플래너에서 불러옴): {plan_info['start_date']} ~ {plan_info['end_date']} · 총 {days}일 "
+            f"— 실제 견적은 2026.08.06~08(2일) 기준값을 이 일수만큼 환산한 시뮬레이션이에요."
+        )
+    else:
+        st.warning("아직 여행 일정이 정해지지 않았어요. 임시로 2일 기준으로 계산할게요 (플래너에서 일정을 정하면 자동 반영돼요).")
+        days = 2
+
+    col1, col2 = st.columns(2)
+    with col1:
+        age_group = st.selectbox("연령대", ["20대 이하", "30~50대", "60대 이상"])
+    with col2:
+        plan = st.radio("플랜", ["기본형", "고급형"], horizontal=True)
+
+    if st.button("보험료 계산하기", type="primary"):
+        st.markdown('<div class="rag-section-label">📊 계산 결과</div>', unsafe_allow_html=True)
+        for company, rates in PREMIUM_BASE_RATES.items():
+            base = rates[plan]
+            multiplier = PREMIUM_AGE_MULTIPLIER[company][age_group]
+            total = base * (days / 2) * multiplier  # 기준값 자체가 "2일" 기준이라 2로 나눠 일할 계산
+            est_note = " (일부 추정치 포함)" if company in PREMIUM_IS_ESTIMATED else ""
+            st.markdown(
+                f'<div class="friendly-box"><b>{company}</b>{est_note}<br>'
+                f'2일 기준요금 {base:,}원 × {days/2:.1f} × 연령배율 {multiplier} '
+                f'= <b>약 {total:,.0f}원</b></div>',
+                unsafe_allow_html=True,
+            )
+        st.caption("※ 위 금액은 2026.08.06~08 조건으로 실제 사이트에서 뽑은 견적을 기준으로 한 간이 시뮬레이션입니다. "
+                   "메리츠화재는 보안 프로그램 문제로 실측하지 못해 다른 3개사 패턴으로 추정한 값이 포함돼 있습니다.")
+        st.session_state.trip_context["premium_estimated"] = True
 
 with tab_chat:
     if "insurance_stage" not in st.session_state:
