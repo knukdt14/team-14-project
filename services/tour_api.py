@@ -138,7 +138,7 @@ def _resolve_region(region: dict[str, Any], key: str) -> tuple[str, str]:
 
 
 def _overview(key: str, content_id: str) -> str:
-    details = _items(_request("detailCommon2", key, contentId=content_id))
+    details = _items(_request("detailCommon2", key, contentId=content_id, numOfRows=10, pageNo=1))
     return _clean(str(details[0].get("overview", ""))) if details else ""
 
 
