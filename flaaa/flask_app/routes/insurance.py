@@ -35,6 +35,15 @@ def index():
     stage = session.get("insurance_stage", "start")
     tab = request.args.get("tab", "premium")
 
+    plan_info = get_trip_context().get("plan")
+    days, days_from_planner = insurance_service.days_from_plan(plan_info)
+    premium_rows = None
+    premium_age_counts = session.get("premium_age_counts")
+    if premium_age_counts and session.get("premium_plan"):
+        premium_rows = insurance_service.calculate_premiums(
+            days, premium_age_counts, session["premium_plan"]
+        )
+
     comparison_rows = None
     comparison_comment = None
     resources_error = None
@@ -68,7 +77,42 @@ def index():
         resources_error=resources_error,
         parse_answer=insurance_service.parse_answer_for_ui,
         friendly_text=insurance_service.build_friendly_text,
+        days=days,
+        days_from_planner=days_from_planner,
+        plan_start=(plan_info or {}).get("start_date"),
+        plan_end=(plan_info or {}).get("end_date"),
+        age_groups=insurance_service.PREMIUM_AGE_GROUPS,
+        selected_age_counts=premium_age_counts or {},
+        selected_plan=session.get("premium_plan"),
+        premium_rows=premium_rows,
     )
+
+
+@insurance_bp.route("/premium", methods=["POST"])
+@region_required
+def premium():
+    plan = request.form.get("plan")
+    if plan not in ("기본형", "고급형"):
+        flash("플랜을 선택해 주세요.", "warning")
+        return redirect(url_for("insurance.index", tab="premium"))
+
+    age_counts = {}
+    for age_group in insurance_service.PREMIUM_AGE_GROUPS:
+        idx = insurance_service.PREMIUM_AGE_GROUPS.index(age_group)
+        raw = request.form.get(f"age_count_{idx}", "0")
+        try:
+            age_counts[age_group] = max(int(raw), 0)
+        except ValueError:
+            age_counts[age_group] = 0
+
+    if sum(age_counts.values()) == 0:
+        flash("최소 1명 이상 인원을 입력해 주세요.", "warning")
+        return redirect(url_for("insurance.index", tab="premium"))
+
+    session["premium_age_counts"] = age_counts
+    session["premium_plan"] = plan
+    set_trip_context_value("premium_estimated", True)
+    return redirect(url_for("insurance.index", tab="premium"))
 
 
 @insurance_bp.route("/start", methods=["POST"])

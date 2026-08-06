@@ -23,9 +23,48 @@
 </div>
 
 {% if tab == 'premium' %}
-<div class="panel empty-state">
-  <div style="font-size:15px; font-weight:700; color:var(--text);">보험료 계산 기능을 준비하고 있어요</div>
-  <div style="margin-top:6px;">곧 이용하실 수 있도록 열심히 만들고 있습니다.</div>
+<div class="panel">
+  <div class="rag-section-label">💰 4개사 실제 보험료 계산</div>
+
+  {% if days_from_planner %}
+    <p style="color:var(--text-muted); font-size:13px;">
+      🗓️ 여행 일정(플래너에서 불러옴): {{ plan_start }} ~ {{ plan_end }} · 총 {{ days }}일 →
+      실제 견적을 2일 기준가에 이 일수만큼 환산한 시뮬레이션이에요.
+    </p>
+  {% else %}
+    <div class="flash flash-warning">아직 여행 일정이 정해지지 않았어요. 우선 2일 기준으로 계산할게요 (플래너에서 일정을 정하면 자동 반영돼요).</div>
+  {% endif %}
+
+  <p>연령대별로 몇 명인지 입력해주세요 (보험사마다 나이대 구간이 다를 수 있어요).</p>
+  <form method="post" action="{{ url_for('insurance.premium') }}" class="form-row" style="align-items:flex-end; flex-wrap:wrap;">
+    {% for ag in age_groups %}
+      <div class="form-group" style="flex:1; min-width:140px;">
+        <label>{{ ag }}</label>
+        <input type="number" name="age_count_{{ loop.index0 }}" min="0" max="10"
+               value="{{ selected_age_counts.get(ag, 1 if loop.first else 0) }}"
+               style="width:100%; border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 10px;">
+      </div>
+    {% endfor %}
+    <div class="form-group" style="flex:1; min-width:220px;">
+      <label>플랜</label>
+      <div class="form-row">
+        <label><input type="radio" name="plan" value="기본형" {{ 'checked' if selected_plan != '고급형' else '' }}> 기본형</label>
+        <label><input type="radio" name="plan" value="고급형" {{ 'checked' if selected_plan == '고급형' else '' }}> 고급형</label>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">보험료 계산하기</button>
+  </form>
+
+  {% if premium_rows %}
+    <div class="rag-section-label" style="margin-top:20px;">📊 계산 결과</div>
+    {% for row in premium_rows %}
+      <div class="friendly-box" style="margin-bottom:10px;">
+        <b>{{ row.company }}</b>{% if row.is_estimated %} (일부 추정치 포함){% endif %}<br>
+        2일 기준요금 {{ '{:,}'.format(row.base) }}원 × {{ row.days_factor }} × ({{ row.breakdown }})
+        = <b>약 {{ '{:,}'.format(row.total) }}원</b>
+      </div>
+    {% endfor %}
+  {% endif %}
 </div>
 
 {% else %}

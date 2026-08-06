@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
@@ -48,6 +49,61 @@ INTENT_LABELS = {
     "여행취소": "여행 자체를 취소하게 된 경우",
     "여권분실": "여권 분실/도난",
 }
+
+
+# ---------------------------------------------------------------------------
+# 보험료 계산 (4개사 다이렉트 사이트에서 동일 조건으로 직접 뽑은 실제 견적 기준)
+# ---------------------------------------------------------------------------
+PREMIUM_BASE_RATES = {
+    "현대해상": {"기본형": 5000, "고급형": 5000},
+    "삼성화재": {"기본형": 3130, "고급형": 3130},
+    "DB손해보험": {"기본형": 2000, "고급형": 2000},
+    "메리츠화재": {"기본형": 3500, "고급형": 3500},  # 실측 실패 -> 추정치
+}
+PREMIUM_AGE_GROUPS = ["20대 (~29세)", "30~50대 (~59세)", "60대 이상"]
+PREMIUM_AGE_MULTIPLIER = {
+    "현대해상":   {"20대 (~29세)": 1.0, "30~50대 (~59세)": 1.15, "60대 이상": 1.4},
+    "삼성화재":   {"20대 (~29세)": 1.0, "30~50대 (~59세)": 1.7,  "60대 이상": 2.9},
+    "DB손해보험": {"20대 (~29세)": 1.0, "30~50대 (~59세)": 1.7,  "60대 이상": 2.7},
+    "메리츠화재": {"20대 (~29세)": 1.0, "30~50대 (~59세)": 1.6,  "60대 이상": 2.3},
+}
+PREMIUM_IS_ESTIMATED = {"메리츠화재"}
+
+
+def days_from_plan(plan_info: dict | None) -> tuple[int, bool]:
+    """trip_context['plan']의 ISO 날짜 문자열로 여행 일수를 계산한다.
+    반환값: (일수, 플래너에서_가져왔는지 여부). plan 정보가 없으면 2일 기본값 + False.
+    """
+    if plan_info and plan_info.get("start_date") and plan_info.get("end_date"):
+        start = date.fromisoformat(plan_info["start_date"])
+        end = date.fromisoformat(plan_info["end_date"])
+        return max((end - start).days, 1), True
+    return 2, False
+
+
+def calculate_premiums(days: int, age_counts: dict[str, int], plan: str) -> list[dict]:
+    """4개사 예상 보험료를 계산한다. age_counts는 {연령대: 인원수} - 보험사마다
+    연령대가 다를 수 있어서 연령대별로 가입자 배율을 적용해 합산한다."""
+    rows = []
+    for company, rates in PREMIUM_BASE_RATES.items():
+        base = rates[plan]
+        total = sum(
+            base * (days / 2) * PREMIUM_AGE_MULTIPLIER[company][age_group] * count
+            for age_group, count in age_counts.items() if count > 0
+        )
+        breakdown = ", ".join(
+            f"{age_group} {count}명×{PREMIUM_AGE_MULTIPLIER[company][age_group]}배"
+            for age_group, count in age_counts.items() if count > 0
+        )
+        rows.append({
+            "company": company,
+            "base": base,
+            "days_factor": round(days / 2, 1),
+            "breakdown": breakdown,
+            "total": round(total),
+            "is_estimated": company in PREMIUM_IS_ESTIMATED,
+        })
+    return rows
 
 
 class ResourcesUnavailable(RuntimeError):

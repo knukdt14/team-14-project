@@ -500,6 +500,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--bg); border: 1.5px dashed var(--accent); border-radius: 12px;
   padding: 16px 18px; font-family: "Pretendard", monospace;
   font-size: 14.5px; line-height: 1.65; color: var(--text); white-space: pre-wrap;
+  margin-top: 16px; /* 위쪽 ARTICLE 라벨(-11px 띄워둔)이 바로 위 텍스트랑 겹치지 않게 여백 확보 */
 }
 .clause-ticket::before {
   content: "\2708 ARTICLE";
