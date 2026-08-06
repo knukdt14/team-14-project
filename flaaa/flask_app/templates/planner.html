@@ -1,27 +1,32 @@
 {% extends "base.html" %}
 {% block title %}여행 플래너 · TripRoll{% endblock %}
+{% block hero %}
+<div class="hero">
+  <span class="hero-badge">🗓️ STEP 2 · 여행 플래너</span>
+  <h1 class="hero-title">{{ region.name }}, 날짜별 일정을<br>AI가 짜드릴게요</h1>
+  <p class="hero-sub">P1에서 확정한 여행지의 실제 TourAPI 장소만 골라 동선 좋은 일정을 구성합니다.</p>
+</div>
+{% endblock %}
 {% block content %}
-<div class="page-title">여행 플래너</div>
-<div class="page-sub">P1에서 확정한 여행지의 실제 TourAPI 장소만 골라 AI가 날짜별 일정을 구성합니다.</div>
-
-<p style="text-align:center; color:var(--text-muted); font-size:13px; margin-top:-16px;">목적지 연동: 랜덤 목적지 선정(P1) · <strong>{{ region.name }}</strong></p>
 
 <div class="panel">
   <form method="post" action="{{ url_for('planner.set_profile') }}">
+    <div class="form-section-label">✈️ 여행 기본 정보</div>
     <div class="form-row">
       <div class="form-group">
-        <label for="title">여행 이름</label>
+        <label for="title">✏️ 여행 이름</label>
         <input type="text" id="title" name="title" value="{{ profile.title }}">
       </div>
       <div class="form-group">
-        <label for="departure">출발지</label>
+        <label for="departure">🚗 출발지</label>
         <input type="text" id="departure" name="departure" value="{{ profile.departure }}">
       </div>
       <div class="form-group">
-        <label for="count">여행 인원</label>
+        <label for="count">👥 여행 인원</label>
         <input type="number" id="count" name="count" min="1" max="20" value="{{ profile.count }}">
       </div>
     </div>
+    <div class="form-section-label">📅 일정 · 이동 · 예산</div>
     <div class="form-row">
       <div class="form-group">
         <label for="start">출발일</label>
@@ -32,7 +37,7 @@
         <input type="date" id="end" name="end" value="{{ profile.end }}">
       </div>
       <div class="form-group">
-        <label for="relationship">관계</label>
+        <label for="relationship">❤️ 관계</label>
         <select id="relationship" name="relationship">
           {% for r in relationships %}<option value="{{ r }}" {{ 'selected' if r == profile.relationship else '' }}>{{ r }}</option>{% endfor %}
         </select>
@@ -40,26 +45,27 @@
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="transport">주요 이동수단</label>
+        <label for="transport">🚌 주요 이동수단</label>
         <select id="transport" name="transport">
           {% for t in transports %}<option value="{{ t }}" {{ 'selected' if t == profile.transport else '' }}>{{ t }}</option>{% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <label for="budget">1인 예산(원)</label>
+        <label for="budget">💰 1인 예산(원)</label>
         <input type="number" id="budget" name="budget" min="50000" max="5000000" step="50000" value="{{ profile.budget }}">
       </div>
       <div class="form-group" style="flex:2;">
-        <label>여행 스타일</label>
+        <label>🎨 여행 스타일</label>
         <div class="pill-group">
           {% for s in style_options %}
-            <label class="checkbox-row"><input type="checkbox" name="styles" value="{{ s }}" {{ 'checked' if s in profile.styles else '' }}> {{ s }}</label>
+            <label class="chip-checkbox"><input type="checkbox" name="styles" value="{{ s }}" {{ 'checked' if s in profile.styles else '' }}><span>{{ s }}</span></label>
           {% endfor %}
         </div>
       </div>
     </div>
+    <div class="form-section-label">💬 추가 요청사항</div>
     <div class="form-group" style="margin-bottom:16px;">
-      <label for="preferences">추가 요청</label>
+      <label for="preferences">자유롭게 적어주세요</label>
       <textarea id="preferences" name="preferences" placeholder="예: 아이와 함께라 무리 없는 동선, 해산물 제외">{{ profile.preferences }}</textarea>
     </div>
     <button type="submit" class="btn btn-primary btn-block">여행 조건 적용</button>
@@ -154,7 +160,7 @@
 </details>
 
 {% if itinerary %}
-<h3 style="margin:24px 0 12px;">내 일정</h3>
+<div class="section-heading">🧭 내 일정</div>
 {% for d in days %}
   {% set day_items = itinerary_by_day[d.isoformat()] %}
   <div class="panel">
