@@ -10,7 +10,7 @@
 {% block content %}
 
 <div class="panel">
-  <form method="post" action="{{ url_for('planner.set_profile') }}">
+  <form method="post" action="{{ url_for('planner.generate') }}" data-once>
     <div class="form-section-label">✈️ 여행 기본 정보</div>
     <div class="form-row">
       <div class="form-group">
@@ -68,7 +68,8 @@
       <label for="preferences">자유롭게 적어주세요</label>
       <textarea id="preferences" name="preferences" placeholder="예: 아이와 함께라 무리 없는 동선, 해산물 제외">{{ profile.preferences }}</textarea>
     </div>
-    <button type="submit" class="btn btn-primary btn-block">여행 조건 적용</button>
+    {% if developer_mode %}<label class="chip-checkbox"><input type="checkbox" name="use_tmap" {{ 'checked' if tmap_enabled else '' }}><span>TMAP 항공 이동 정보 사용</span></label>{% endif %}
+    <button type="submit" class="btn btn-primary btn-block">여행 조건 적용 후 AI 일정 생성</button>
   </form>
 </div>
 
@@ -88,17 +89,16 @@
     <details style="margin-top:14px;" open>
       <summary style="cursor:pointer; font-weight:700;">{{ day.date }} · 예상 {{ '%d'|format(day.daily_budget) }}원</summary>
       {% for item in day['items'] %}
+        {% if not loop.first %}<div style="display:flex;align-items:center;gap:8px;margin:10px 0 4px 14px;color:#4f8bf9;"><span style="width:2px;height:24px;background:#4f8bf9;"></span><span style="font-size:18px;">↓</span><span style="padding:3px 10px;border-radius:16px;background:#eef4ff;font-size:12px;font-weight:700;">이동 {{ item.travel_minutes_from_previous }}분</span></div>{% endif %}
         <div style="padding:10px 0; border-bottom:1px solid var(--border);">
           <strong>{{ item.time }} · {{ item.name }}</strong><br>
-          <span style="font-size:12px; color:var(--text-muted);">{{ item.category }} · 이전 장소에서 {{ item.travel_minutes_from_previous }}분 · {{ '%d'|format(item.estimated_cost) }}원 · {{ item.address }}</span><br>
+          <span style="font-size:12px; color:var(--text-muted);">{{ item.category }} · {{ '%d'|format(item.estimated_cost) }}원 · {{ item.address }}</span><br>
           <span style="font-size:13px;">{{ item.memo }}</span>
         </div>
       {% endfor %}
     </details>
   {% endfor %}
-  <form method="post" action="{{ url_for('planner.apply_plan') }}" style="margin-top:16px;">
-    <button type="submit" class="btn btn-primary btn-block">AI 일정을 내 플래너에 적용</button>
-  </form>
+  {% if flight_info and profile.transport == '항공' %}<p class="planner-flight">TMAP 항공 이동 정보: {{ flight_info.message or (flight_info.flights[0].departure ~ ' → ' ~ flight_info.flights[0].arrival) }}</p>{% endif %}
 </div>
 {% endif %}
 
@@ -136,6 +136,7 @@
 </details>
 
 {% if itinerary %}
+<div class="panel"><div class="section-heading">일정 동선</div><div id="planner-map" style="height:420px;border-radius:14px;overflow:hidden;"></div><p style="color:var(--text-muted);font-size:12px;margin:12px 0 0;">등록된 일정 장소만 순서대로 연결해 표시합니다.</p></div>
 <div class="section-heading">🧭 내 일정</div>
 {% for d in days %}
   {% set day_items = itinerary_by_day[d.isoformat()] %}
@@ -162,9 +163,20 @@
 {% if itinerary %}
 <div class="next-step-bar" style="margin-top:8px; margin-bottom:20px;">
   <span style="color:var(--text-muted); font-size:14px;">일정이 준비됐어요. 이제 숙소를 골라볼까요?</span>
-  <a class="btn btn-primary" href="{{ url_for('lodging.index') }}">주변 숙소로 이동 →</a>
+  <form method="post" action="{{ url_for('planner.next_step') }}"><button type="submit" class="btn btn-primary">주변 숙소로 이동 →</button></form>
 </div>
 {% endif %}
 
 <a class="btn btn-outline btn-block" href="{{ url_for('planner.export_json') }}">JSON으로 일정 저장</a>
+{% endblock %}
+
+{% block scripts %}
+{% if itinerary %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const routePoints={{ route_points|tojson }},mapEl=document.getElementById('planner-map');
+if(mapEl&&routePoints.length&&window.L){const map=L.map(mapEl,{scrollWheelZoom:false});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);const coords=routePoints.map(p=>[p.latitude,p.longitude]);L.polyline(coords,{color:'#4f8bf9',weight:4}).addTo(map);routePoints.forEach(p=>L.circleMarker([p.latitude,p.longitude],{radius:7,color:'#fff',weight:2,fillColor:'#3478f6',fillOpacity:1}).addTo(map).bindPopup(`<strong>${p.time} · ${p.name}</strong><br>${p.date}`));map.fitBounds(L.latLngBounds(coords),{padding:[30,30],maxZoom:13});}
+else if(mapEl)mapEl.innerHTML='<p style="padding:20px">좌표가 있는 일정 장소가 추가되면 동선 지도가 표시됩니다.</p>';
+</script>
+{% endif %}
 {% endblock %}
