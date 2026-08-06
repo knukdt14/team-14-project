@@ -3,7 +3,10 @@
 {% set icon = type_icons.get(place.kind, '📍') %}
 {% set fav_key = place.id or place.place_url or place.place_name %}
 {% set is_favorite = fav_key in favorites %}
-{% set is_selected = lodging_map.get(night_key, {}).get('name') == place.place_name %}
+{% set selected_entry = lodging_map.get(night_key, {}) %}
+{% set place_key = place.id or place.place_url %}
+{% set selected_key = selected_entry.get('id') or selected_entry.get('place_url') %}
+{% set is_selected = (place_key and selected_key and place_key == selected_key) or (not place_key and not selected_key and selected_entry.get('name') == place.place_name) %}
 {% set addr = place.road_address_name or place.address_name or '' %}
 {% set redirect_qs = ('?' ~ request.query_string.decode()) if request.query_string else '' %}
 <div class="card listing-card">
@@ -43,6 +46,7 @@
       <form method="post" action="{{ url_for('lodging.select') }}" data-once style="flex:1;">
         <input type="hidden" name="night_key" value="{{ night_key }}">
         <input type="hidden" name="night_label" value="{{ night_label }}">
+        <input type="hidden" name="id" value="{{ place.id or '' }}">
         <input type="hidden" name="place_name" value="{{ place.place_name }}">
         <input type="hidden" name="lodging_type" value="{{ place.kind }}">
         <input type="hidden" name="address" value="{{ addr }}">

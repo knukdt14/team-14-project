@@ -26,21 +26,24 @@
 </div>
 
 <div class="section-heading">🛡️ 보험 현황</div>
-{% if insurance_info %}
-  {% if insurance_info.mode == 'insured' %}
-    <div class="friendly-box">✅ <strong>{{ insurance_info.insurer }}</strong> 여행자보험에 이미 가입하셨어요.</div>
-  {% else %}
-    <div class="friendly-box">🧭 아직 미가입 — '<strong>{{ intent_labels.get(insurance_info.intent, insurance_info.intent) }}</strong>' 관련해서 4개사를 비교해보셨어요.</div>
-  {% endif %}
-{% else %}
+{% if not insurance_info and not premium_selection %}
   <div class="panel empty-state">아직 보험 단계를 진행하지 않았어요.</div>
-{% endif %}
-
-{% if premium_selection %}
-  <div class="friendly-box premium-row-selected" style="margin-top:10px;">
-    💰 선택한 예상 보험료: <strong>{{ premium_selection.company }}</strong> ({{ premium_selection.plan }}){% if premium_selection.is_estimated %} · 일부 추정치 포함{% endif %}<br>
-    2일 기준요금 {{ '{:,}'.format(premium_selection.base) }}원 × {{ premium_selection.days_factor }} × ({{ premium_selection.breakdown }})
-    = <strong>약 {{ '{:,}'.format(premium_selection.total) }}원</strong>
+{% else %}
+  <div class="panel">
+    {% if insurance_info %}
+      {% if insurance_info.mode == 'insured' %}
+        <div class="friendly-box">✅ <strong>{{ insurance_info.insurer }}</strong> 여행자보험에 이미 가입하셨어요.</div>
+      {% else %}
+        <div class="friendly-box">🧭 아직 미가입 — '<strong>{{ intent_labels.get(insurance_info.intent, insurance_info.intent) }}</strong>' 관련해서 4개사를 비교해보셨어요.</div>
+      {% endif %}
+    {% endif %}
+    {% if premium_selection %}
+      <div class="friendly-box premium-row-selected" style="{{ 'margin-top:10px;' if insurance_info else '' }}">
+        💰 선택한 예상 보험료: <strong>{{ premium_selection.company }}</strong> ({{ premium_selection.plan }}){% if premium_selection.is_estimated %} · 일부 추정치 포함{% endif %}<br>
+        2일 기준요금 {{ '{:,}'.format(premium_selection.base) }}원 × {{ premium_selection.days_factor }} × ({{ premium_selection.breakdown }})
+        = <strong>약 {{ '{:,}'.format(premium_selection.total) }}원</strong>
+      </div>
+    {% endif %}
   </div>
 {% endif %}
 
@@ -50,49 +53,59 @@
 {% elif not day_groups %}
   <div class="panel empty-state">등록된 일정이 없어요. 플래너에서 일정을 추가해보세요.</div>
 {% else %}
-  <div class="pill-group route-daynav">
+  <div class="pill-group route-daynav" id="route-daynav">
     {% for group in day_groups %}
-      <a class="pill" href="#day-{{ group.index }}">Day {{ group.index + 1 }} · {{ group.date.strftime('%m/%d') }}</a>
+      <button type="button" class="pill {{ 'active' if loop.first }}" data-day="{{ group.index }}">Day {{ group.index + 1 }} · {{ group.date.strftime('%m/%d') }}</button>
     {% endfor %}
   </div>
 
-  {% for group in day_groups %}
-    <details class="panel route-day" id="day-{{ group.index }}" open>
-      <summary class="route-day-summary">
-        <span class="route-day-title">Day {{ group.index + 1 }} · {{ group.date.strftime('%m/%d') }}</span>
-        <span class="route-day-count">{{ group.stops|length }}개 스톱</span>
-      </summary>
-      {% if not group.stops %}
-        <p style="color:var(--text-muted); font-size:13px; margin:10px 0 0;">등록된 일정이 없습니다.</p>
-      {% else %}
-        <div class="route-timeline">
-          {% for stop in group.stops %}
-            <div class="route-stop route-stop-{{ stop.kind }}">
-              <div class="route-stop-marker">{{ '🌙' if stop.kind == 'lodging' else '📍' }}</div>
-              <div class="route-stop-body">
-                <div class="route-stop-meta">
-                  {% if stop.kind == 'lodging' %}{{ group.date.strftime('%m/%d') }} 밤 숙박{% else %}{{ stop.time }}{% endif %}
+  <div class="route-layout">
+    <div class="route-days">
+      {% for group in day_groups %}
+        <div class="panel route-day-panel" data-day="{{ group.index }}" {{ 'hidden' if not loop.first }}>
+          <div class="route-day-head">
+            <span class="route-day-title">Day {{ group.index + 1 }} · {{ group.date.strftime('%m/%d') }}</span>
+            <span class="route-day-count">{{ group.stops|length }}개 스톱</span>
+          </div>
+          {% if not group.stops %}
+            <p style="color:var(--text-muted); font-size:13px; margin:10px 0 0;">등록된 일정이 없습니다.</p>
+          {% else %}
+            <div class="route-timeline">
+              {% for stop in group.stops %}
+                <div class="route-stop route-stop-{{ stop.kind }}">
+                  <div class="route-stop-marker">{{ '🌙' if stop.kind == 'lodging' else '📍' }}</div>
+                  <div class="route-stop-body">
+                    <div class="route-stop-meta">
+                      {% if stop.kind == 'lodging' %}{{ group.date.strftime('%m/%d') }} 밤 숙박{% else %}{{ stop.time }}{% endif %}
+                    </div>
+                    <div class="route-stop-name">
+                      {{ stop.name }}{% if stop.kind == 'lodging' %} 에서 숙박{% endif %}
+                    </div>
+                    <div class="route-stop-sub">
+                      {% if stop.kind == 'lodging' %}
+                        {{ stop.type }}{% if stop.address %} · {{ stop.address }}{% endif %}
+                      {% else %}
+                        {{ stop.category }}{% if stop.address %} · {{ stop.address }}{% endif %}{% if stop.memo %} · {{ stop.memo }}{% endif %}
+                      {% endif %}
+                    </div>
+                    {% if stop.latitude and stop.longitude %}
+                      <a class="route-stop-map" href="https://map.kakao.com/link/map/{{ stop.name }},{{ stop.latitude }},{{ stop.longitude }}" target="_blank" rel="noopener">🗺️ 지도에서 보기</a>
+                    {% endif %}
+                  </div>
                 </div>
-                <div class="route-stop-name">
-                  {{ stop.name }}{% if stop.kind == 'lodging' %} 에서 숙박{% endif %}
-                </div>
-                <div class="route-stop-sub">
-                  {% if stop.kind == 'lodging' %}
-                    {{ stop.type }}{% if stop.address %} · {{ stop.address }}{% endif %}
-                  {% else %}
-                    {{ stop.category }}{% if stop.address %} · {{ stop.address }}{% endif %}{% if stop.memo %} · {{ stop.memo }}{% endif %}
-                  {% endif %}
-                </div>
-                {% if stop.latitude and stop.longitude %}
-                  <a class="route-stop-map" href="https://map.kakao.com/link/map/{{ stop.name }},{{ stop.latitude }},{{ stop.longitude }}" target="_blank" rel="noopener">🗺️ 지도에서 보기</a>
-                {% endif %}
-              </div>
+              {% endfor %}
             </div>
-          {% endfor %}
+          {% endif %}
         </div>
-      {% endif %}
-    </details>
-  {% endfor %}
+      {% endfor %}
+    </div>
+
+    <div class="panel route-map-wrap">
+      <div id="summary-map" style="height:480px; border-radius:14px; overflow:hidden;"></div>
+      <p id="summary-map-empty" style="display:none; padding:12px 2px 0; color:var(--text-muted); font-size:13px;">이 날짜엔 좌표가 있는 일정이 없어 지도에 표시할 게 없어요.</p>
+      <p style="color:var(--text-muted); font-size:12px; margin:12px 0 0;">선택한 Day의 일정 장소만 순서대로 연결해 표시합니다.</p>
+    </div>
+  </div>
 {% endif %}
 
 {% if extra_lodging %}
@@ -118,4 +131,67 @@
     <a class="btn btn-outline btn-sm" href="{{ url_for('insurance.index') }}">보험 수정</a>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if day_groups %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const DAY_ROUTE_POINTS = {{ day_route_points|tojson }};
+const mapEl = document.getElementById('summary-map');
+let map = null, mapLayers = [];
+
+function renderDayMap(day) {
+  const points = DAY_ROUTE_POINTS[day] || [];
+  const emptyMsg = document.getElementById('summary-map-empty');
+  if (!mapEl || !window.L) return;
+
+  if (!map) map = L.map(mapEl, { scrollWheelZoom: false });
+  mapLayers.forEach(layer => map.removeLayer(layer));
+  mapLayers = [];
+
+  if (!points.length) {
+    if (emptyMsg) emptyMsg.style.display = 'block';
+    if (!map._tripRollTileAdded) {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+      map._tripRollTileAdded = true;
+      map.setView([36.5, 127.8], 6);
+    }
+    return;
+  }
+  if (emptyMsg) emptyMsg.style.display = 'none';
+
+  if (!map._tripRollTileAdded) {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    map._tripRollTileAdded = true;
+  }
+
+  const coords = points.map(p => [p.latitude, p.longitude]);
+  mapLayers.push(L.polyline(coords, { color: '#2f6fed', weight: 4 }).addTo(map));
+  points.forEach(p => {
+    const color = p.kind === 'lodging' ? '#17b8a6' : '#2f6fed';
+    mapLayers.push(
+      L.circleMarker([p.latitude, p.longitude], { radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
+        .addTo(map)
+        .bindPopup(`<strong>${p.time} · ${p.name}</strong><br>${p.date}`)
+    );
+  });
+  map.fitBounds(L.latLngBounds(coords), { padding: [30, 30], maxZoom: 15 });
+}
+
+document.querySelectorAll('#route-daynav .pill').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('#route-daynav .pill').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    var day = btn.dataset.day;
+    document.querySelectorAll('.route-day-panel').forEach(function (panel) {
+      panel.hidden = panel.dataset.day !== day;
+    });
+    renderDayMap(day);
+  });
+});
+
+renderDayMap('0');
+</script>
+{% endif %}
 {% endblock %}
