@@ -1,5 +1,10 @@
 <div class="panel dart-panel">
-  <p class="dart-instructions">아래쪽 다트를 <strong>아래로 당겼다가 놓으세요.</strong> 당긴 만큼 멀리 날아갑니다. 밝은 지역이 조건에 맞는 곳입니다.</p>
+  <div class="dart-toolbar">
+    <p class="dart-instructions">아래쪽 다트를 <strong>아래로 당겼다가 놓으세요.</strong> 당긴 만큼 멀리 날아갑니다. 진한 색으로 칠해진 지역이 조건에 맞는 곳입니다.</p>
+    <label class="chip-checkbox dart-spin-toggle">
+      <input type="checkbox" id="dart-spin"><span>🌀 지도 돌리기</span>
+    </label>
+  </div>
   <div id="dart-stage"></div>
   <div id="dart-tip">당겼다가 놓아서 던지세요</div>
 </div>
@@ -14,5 +19,6 @@
 <script>
   window.DART_POOL_NAMES = {{ pool_names | tojson }};
   window.DART_MAP_URL = {{ map_data_url | tojson }};
+  window.DART_REGION_SIDO = {{ region_sido | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/dart.js') }}"></script>
