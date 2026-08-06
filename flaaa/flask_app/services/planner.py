@@ -25,7 +25,10 @@ from services.tmap_transit import TmapTransitError, fetch_air_travel_info
 from services.tour_api import fetch_place_candidates
 
 logger = logging.getLogger(__name__)
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
 TOUR_SIDO_COMPATIBILITY = {"전라남도": "전라북도"}
 
 
@@ -51,17 +54,24 @@ def build_profile(region: dict, form: dict) -> dict:
 
 
 def load_flight_info(region: dict, origin: dict, start: date, transport: str, enabled: bool) -> dict | None:
+<<<<<<< Updated upstream
     """Retrieve route facts for air travel only; never let the LLM invent them."""
+=======
+>>>>>>> Stashed changes
     if transport != "항공":
         return None
     if not enabled:
         return {"available": False, "disabled": True, "message": "TMAP transit lookup is disabled."}
     try:
+<<<<<<< Updated upstream
         return fetch_air_travel_info(
             float(origin["latitude"]), float(origin["longitude"]),
             float(region["latitude"]), float(region["longitude"]), start,
             os.getenv("TMAP_APP_KEY", ""),
         )
+=======
+        return fetch_air_travel_info(float(origin["latitude"]), float(origin["longitude"]), float(region["latitude"]), float(region["longitude"]), start, os.getenv("TMAP_APP_KEY", ""))
+>>>>>>> Stashed changes
     except (KeyError, TypeError, ValueError):
         return {"available": False, "message": "Departure coordinates are unavailable."}
     except TmapTransitError as error:
@@ -69,6 +79,7 @@ def load_flight_info(region: dict, origin: dict, start: date, transport: str, en
 
 
 @cache.memoize(timeout=21600)
+<<<<<<< Updated upstream
 def tour_candidates(
     sido: str, sigungu: str, name: str, latitude: float | None, longitude: float | None,
     start: date, end: date, rows: int, api_key: str,
@@ -78,6 +89,10 @@ def tour_candidates(
         {"sido": sido, "sigungu": sigungu, "name": name, "lat": latitude, "lng": longitude},
         start, end, api_key, rows,
     )
+=======
+def tour_candidates(sido: str, sigungu: str, name: str, latitude: float | None, longitude: float | None, start: date, end: date, rows: int, api_key: str) -> list[dict]:
+    return fetch_place_candidates({"sido": sido, "sigungu": sigungu, "name": name, "lat": latitude, "lng": longitude}, start, end, api_key, rows)
+>>>>>>> Stashed changes
 
 
 @cache.memoize(timeout=86400)
@@ -95,6 +110,7 @@ def retrieve_candidates(region: dict, profile: dict, start: date, end: date) -> 
     if not hf_token:
         raise ValueError(".env에 HF_TOKEN을 설정해 주세요.")
 
+<<<<<<< Updated upstream
     # The shared TourAPI adapter currently has no "전라남도" label in its
     # area-code table although code 46 is the Jeonnam administrative area.
     # Use its existing code-46 lookup label only at this planner boundary.
@@ -112,6 +128,16 @@ def retrieve_candidates(region: dict, profile: dict, start: date, end: date) -> 
         "[Planner TourAPI] selected=%s/%s request=%s/%s candidates=%d",
         region["sido"], region.get("sigungu", ""), tour_sido, tour_sigungu, len(candidates),
     )
+=======
+    tour_sido = TOUR_SIDO_COMPATIBILITY.get(region["sido"], region["sido"])
+    tour_sigungu = "" if tour_sido != region["sido"] else region.get("sigungu", "")
+    tour_name = "" if tour_sido != region["sido"] else region["name"]
+    candidates = tour_candidates(
+        tour_sido, tour_sigungu, tour_name, region.get("latitude"), region.get("longitude"), start, end,
+        int(os.getenv("TOUR_API_ROWS_PER_TYPE", "6")), tour_key,
+    )
+    logger.warning("[Planner TourAPI] selected=%s/%s candidates=%d", region["sido"], region.get("sigungu", ""), len(candidates))
+>>>>>>> Stashed changes
     query = build_search_query(profile)
     model = os.getenv("HF_EMBEDDING_MODEL", "intfloat/multilingual-e5-small")
 
@@ -119,6 +145,7 @@ def retrieve_candidates(region: dict, profile: dict, start: date, end: date) -> 
         return np.asarray(_embed_cached(text, model, hf_token), dtype=np.float32)
 
     ranked, mode = rank_candidates(candidates, query, embed, int(os.getenv("RAG_TOP_K", "12")))
+<<<<<<< Updated upstream
     logger.warning(
         "[Planner RAG] query=%r input=%d ranked=%d mode=%s",
         query, len(candidates), len(ranked), mode,
@@ -128,6 +155,11 @@ def retrieve_candidates(region: dict, profile: dict, start: date, end: date) -> 
             f"이 지역에서 일정 후보 장소를 찾지 못했습니다. "
             f"(TourAPI 후보 {len(candidates)}개, RAG 후보 {len(ranked)}개)"
         )
+=======
+    logger.warning("[Planner RAG] input=%d ranked=%d mode=%s", len(candidates), len(ranked), mode)
+    if not ranked:
+        raise ValueError(f"이 지역에서 일정 후보 장소를 찾지 못했습니다. (TourAPI 후보 {len(candidates)}개, RAG 후보 {len(ranked)}개)")
+>>>>>>> Stashed changes
     return ranked, query, mode
 
 
@@ -141,7 +173,11 @@ def build_prompt(profile: dict, candidates: list[dict], dates: list[str]) -> str
 여행 날짜: {json.dumps(dates, ensure_ascii=False)}
 관계별 선호 키워드: {json.dumps(RELATIONSHIP_KEYWORDS.get(profile['relationship'], []), ensure_ascii=False)}
 TourAPI 후보: {json.dumps(allowed, ensure_ascii=False)}
+<<<<<<< Updated upstream
 비용 기준: 모든 estimated_cost, daily_budget, total_estimated_cost는 1인 기준이다. total_estimated_cost는 budget_per_person를 절대 초과하지 말고, 여행 인원(count)을 곱해 총예산 한도로 사용하지 말 것.
+=======
+비용 기준: 모든 비용은 1인 기준이며 total_estimated_cost는 budget_per_person를 초과하지 않는다.
+>>>>>>> Stashed changes
 규칙: 후보 밖의 장소를 지어내지 말 것. itinerary는 날짜 목록을 같은 순서로 정확히 한 번씩 모두 포함할 것. 가까운 장소를 묶고, 이동·식사·휴식과 1인 기준 추정비용을 반영할 것. 축제는 여행 기간과 겹칠 때만 사용한다."""
 
 
@@ -153,9 +189,13 @@ def validate_plan(plan: TravelPlan, dates: list[str], allowed_ids: set[str], bud
     if invalid:
         raise ValueError(f"TourAPI 후보에 없는 장소가 포함되었습니다: {', '.join(sorted(invalid))}")
     if plan.total_estimated_cost > budget_per_person:
+<<<<<<< Updated upstream
         raise ValueError(
             f"1인 예상 총비용 {plan.total_estimated_cost:,}원이 1인 예산 {budget_per_person:,}원을 초과했습니다."
         )
+=======
+        raise ValueError(f"1인 예상 총비용 {plan.total_estimated_cost:,}원이 1인 예산을 초과했습니다.")
+>>>>>>> Stashed changes
 
 
 def parse_llm_plan(content: str) -> TravelPlan:
@@ -173,6 +213,7 @@ def parse_llm_plan(content: str) -> TravelPlan:
 
 
 def _upstage_completion(messages: list[dict], max_tokens: int, temperature: float) -> str:
+<<<<<<< Updated upstream
     """Call Solar Pro 4 through Upstage's OpenAI-compatible Chat API."""
     api_key = os.getenv("UPSTAGE_API_KEY", "").strip()
     if not api_key:
@@ -196,6 +237,14 @@ def _upstage_completion(messages: list[dict], max_tokens: int, temperature: floa
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             timeout=120,
         )
+=======
+    api_key = os.getenv("UPSTAGE_API_KEY", "").strip()
+    if not api_key:
+        raise ValueError("UPSTAGE_API_KEY를 .env에 설정해 주세요.")
+    payload = {"model": os.getenv("UPSTAGE_MODEL", "solar-pro4"), "messages": messages, "response_format": {"type": "json_object"}, "max_tokens": max_tokens, "temperature": temperature, "reasoning_effort": os.getenv("UPSTAGE_REASONING_EFFORT", "low")}
+    try:
+        response = requests.post(os.getenv("UPSTAGE_BASE_URL", "https://api.upstage.ai/v1").rstrip("/") + "/chat/completions", json=payload, headers={"Authorization": f"Bearer {api_key}"}, timeout=120)
+>>>>>>> Stashed changes
         response.raise_for_status()
         choice = response.json()["choices"][0]
         message = choice["message"]
@@ -204,10 +253,14 @@ def _upstage_completion(messages: list[dict], max_tokens: int, temperature: floa
         detail = response.text[:300] if "response" in locals() else str(error)
         raise ValueError(f"Upstage Solar API 호출에 실패했습니다: {detail}") from error
     if not isinstance(content, str) or not content.strip():
+<<<<<<< Updated upstream
         logger.warning(
             "[Planner Upstage] empty content model=%s finish_reason=%s message_keys=%s",
             payload["model"], choice.get("finish_reason"), sorted(message.keys()),
         )
+=======
+        logger.warning("[Planner Upstage] empty content model=%s finish_reason=%s", payload["model"], choice.get("finish_reason"))
+>>>>>>> Stashed changes
         raise ValueError("Upstage Solar API가 빈 응답을 반환했습니다.")
     return content
 
@@ -222,6 +275,7 @@ def generate_plan(region: dict, profile: dict, start: date, end: date) -> dict:
     dates = [d.isoformat() for d in days_between(start, end)]
     output_schema = strict_response_format([item["content_id"] for item in candidates], dates)["json_schema"]["schema"]
     messages = [
+<<<<<<< Updated upstream
         {
             "role": "system",
             "content": (
@@ -230,6 +284,9 @@ def generate_plan(region: dict, profile: dict, start: date, end: date) -> dict:
                 f"JSON Schema: {json.dumps(output_schema, ensure_ascii=False)}"
             ),
         },
+=======
+        {"role": "system", "content": f"TourAPI 근거만 사용하세요. 설명 없이 json 객체 하나만 출력하세요. 아래 JSON Schema 필드와 구조만 사용하세요.\n{json.dumps(output_schema, ensure_ascii=False)}"},
+>>>>>>> Stashed changes
         {"role": "user", "content": build_prompt(profile, candidates, dates)},
     ]
     allowed_ids = {item["content_id"] for item in candidates}
@@ -237,6 +294,7 @@ def generate_plan(region: dict, profile: dict, start: date, end: date) -> dict:
     last_error: Exception | None = None
     for attempt in range(2):
         try:
+<<<<<<< Updated upstream
             text = _upstage_completion(
                 messages,
                 min(12_000, max(8_000, len(dates) * 1_500)),
@@ -247,6 +305,13 @@ def generate_plan(region: dict, profile: dict, start: date, end: date) -> dict:
             if attempt == 0:
                 logger.warning("[Planner Upstage] first request failed; retrying once: %s", error)
                 messages.append({"role": "user", "content": "응답 본문이 비어 있었습니다. 앞서 제공한 JSON Schema 그대로 JSON만 다시 출력하세요."})
+=======
+            text = _upstage_completion(messages, min(12_000, max(8_000, len(dates) * 1_500)), 0.3 if attempt == 0 else 0.1)
+        except ValueError as error:
+            last_error = error
+            if attempt == 0:
+                messages.append({"role": "user", "content": "JSON 본문이 비어 있었습니다. JSON만 다시 출력하세요."})
+>>>>>>> Stashed changes
                 continue
             raise
         try:

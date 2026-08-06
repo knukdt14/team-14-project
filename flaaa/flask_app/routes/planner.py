@@ -92,22 +92,33 @@ def _sync_context(region: dict) -> None:
             "center": center,
             "transportation": profile.get("transport"),
             "flight_operation": session.get("planner_flight_info"),
+<<<<<<< Updated upstream
             "route_points": _route_points(items, profile.get("transport")),
+=======
+            "route_points": _route_points(items),
+>>>>>>> Stashed changes
             "retrieval_query": session.get("planner_query", ""),
         },
     )
 
 
+<<<<<<< Updated upstream
 def _route_points(items: list[dict], transport: str | None) -> list[dict]:
     """Return only scheduled places for the planner route map."""
     return [
         {key: item[key] for key in ("name", "latitude", "longitude", "date", "time")}
         | {"kind": "schedule"}
+=======
+def _route_points(items: list[dict]) -> list[dict]:
+    return [
+        {key: item[key] for key in ("name", "latitude", "longitude", "date", "time")} | {"kind": "schedule"}
+>>>>>>> Stashed changes
         for item in sorted(items, key=lambda value: (value["date"], value["time"]))
         if item.get("latitude") is not None and item.get("longitude") is not None
     ]
 
 
+<<<<<<< Updated upstream
 def _profile_from_form(form, region: dict) -> tuple[dict | None, str | None]:
     """Validate the planner form so one submit can save and generate."""
     try:
@@ -115,10 +126,17 @@ def _profile_from_form(form, region: dict) -> tuple[dict | None, str | None]:
         end = date.fromisoformat(form["end"])
         count = min(20, max(1, int(form.get("count") or 2)))
         budget = min(5_000_000, max(50_000, int(form.get("budget") or 300000)))
+=======
+def _profile_from_form(form) -> tuple[dict | None, str | None]:
+    try:
+        start, end = date.fromisoformat(form["start"]), date.fromisoformat(form["end"])
+        count, budget = min(20, max(1, int(form.get("count") or 2))), min(5_000_000, max(50_000, int(form.get("budget") or 300000)))
+>>>>>>> Stashed changes
     except (KeyError, ValueError):
         return None, "여행 날짜, 인원, 예산을 올바르게 입력해 주세요."
     if end < start or (end - start).days > 13:
         return None, "여행 날짜는 시작일 이후이며 최대 14일이어야 합니다."
+<<<<<<< Updated upstream
     transport = form.get("transport") if form.get("transport") in TRANSPORT else "자동차"
     return {
         "title": form.get("title") or "국내 여행",
@@ -128,6 +146,9 @@ def _profile_from_form(form, region: dict) -> tuple[dict | None, str | None]:
         "transport": transport, "budget": budget,
         "styles": form.getlist("styles"), "preferences": form.get("preferences", ""),
     }, None
+=======
+    return {"title": form.get("title") or "국내 여행", "start": start.isoformat(), "end": end.isoformat(), "count": count, "relationship": form.get("relationship") or "친구", "departure": form.get("departure") or "출발지 미입력", "transport": form.get("transport") if form.get("transport") in TRANSPORT else "자동차", "budget": budget, "styles": form.getlist("styles"), "preferences": form.get("preferences", "")}, None
+>>>>>>> Stashed changes
 
 
 @planner_bp.route("/")
@@ -164,10 +185,17 @@ def index():
         plan=session.get("planner_llm"),
         itinerary=itinerary,
         itinerary_by_day=itinerary_by_day,
+<<<<<<< Updated upstream
         flight_info=session.get("planner_flight_info"),
         route_points=_route_points(itinerary, profile.get("transport")),
         developer_mode=os.getenv("DEVELOPER_MODE", "").lower() in {"1", "true", "yes", "on"},
         tmap_enabled=session.get("planner_use_tmap", os.getenv("ENABLE_TMAP_TRANSIT", "").lower() in {"1", "true", "yes", "on"}),
+=======
+        route_points=_route_points(itinerary),
+        flight_info=session.get("planner_flight_info"),
+        developer_mode=os.getenv("DEVELOPER_MODE", "").lower() in {"1", "true", "yes", "on"},
+        tmap_enabled=session.get("planner_use_tmap", False),
+>>>>>>> Stashed changes
     )
 
 
@@ -223,7 +251,11 @@ def set_profile():
 @region_required
 def generate():
     region = get_trip_context()["region"]
+<<<<<<< Updated upstream
     profile, error = _profile_from_form(request.form, region)
+=======
+    profile, error = _profile_from_form(request.form)
+>>>>>>> Stashed changes
     if error:
         flash(error, "error")
         return redirect(url_for("planner.index"))
@@ -231,7 +263,10 @@ def generate():
     session["planner_region_key"] = region["name"]
     session["planner_candidates"] = []
     session["planner_llm"] = None
+<<<<<<< Updated upstream
     session["planner_flight_info"] = None
+=======
+>>>>>>> Stashed changes
     session["planner_itinerary"] = []
     session["planner_use_tmap"] = request.form.get("use_tmap") == "on"
     if not profile:
@@ -240,17 +275,25 @@ def generate():
 
     start = date.fromisoformat(profile["start"])
     end = date.fromisoformat(profile["end"])
+<<<<<<< Updated upstream
     flight_info = planner_service.load_flight_info(
         region, get_trip_context().get("origin", {}), start, profile["transport"],
         session.get("planner_use_tmap", False),
     )
+=======
+    flight_info = planner_service.load_flight_info(region, get_trip_context().get("origin", {}), start, profile["transport"], session.get("planner_use_tmap", False))
+>>>>>>> Stashed changes
     full_profile = planner_service.build_profile(
         region,
         {
             "start": start, "end": end, "departure": profile["departure"], "count": profile["count"],
             "relationship": profile["relationship"], "transport": profile["transport"],
+<<<<<<< Updated upstream
             "budget": profile["budget"], "styles": profile["styles"], "preferences": profile["preferences"],
             "flight_operation": flight_info,
+=======
+            "budget": profile["budget"], "styles": profile["styles"], "preferences": profile["preferences"], "flight_operation": flight_info,
+>>>>>>> Stashed changes
         },
     )
     try:
@@ -267,11 +310,15 @@ def generate():
     session["planner_query"] = result["query"]
     session["planner_mode"] = result["mode"]
     session["planner_flight_info"] = flight_info
+<<<<<<< Updated upstream
     session["planner_itinerary"] = [
         {"id": str(uuid4()), "date": day["date"], **item}
         for day in result["plan"]["itinerary"]
         for item in day["items"]
     ]
+=======
+    session["planner_itinerary"] = [{"id": str(uuid4()), "date": day["date"], **item} for day in result["plan"]["itinerary"] for item in day["items"]]
+>>>>>>> Stashed changes
     session.modified = True
     _sync_context(region)
     flash("TourAPI 근거 기반 AI 일정을 생성했습니다.", "success")
@@ -347,7 +394,10 @@ def delete_item(item_id: str):
 @planner_bp.route("/next", methods=["POST"])
 @region_required
 def next_step():
+<<<<<<< Updated upstream
     """Keep the P2 → P3 handoff explicit and only navigate with an itinerary."""
+=======
+>>>>>>> Stashed changes
     region = get_trip_context()["region"]
     if not session.get("planner_itinerary"):
         flash("일정을 생성하거나 직접 추가한 뒤 숙소 선택으로 이동할 수 있습니다.", "warning")

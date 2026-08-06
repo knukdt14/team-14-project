@@ -15,6 +15,10 @@
 
 <div class="panel">
   <form method="post" action="{{ url_for('planner.generate') }}" data-once>
+<<<<<<< Updated upstream
+=======
+    <div class="form-section-label">✈️ 여행 기본 정보</div>
+>>>>>>> Stashed changes
     <div class="form-row">
       <div class="form-group">
         <label for="title">여행 이름</label>
@@ -69,11 +73,15 @@
       <label for="preferences">추가 요청</label>
       <textarea id="preferences" name="preferences" placeholder="예: 아이와 함께라 무리 없는 동선, 해산물 제외">{{ profile.preferences }}</textarea>
     </div>
+<<<<<<< Updated upstream
     {% if developer_mode %}
     <label class="checkbox-row" style="margin:-4px 0 16px;">
       <input type="checkbox" name="use_tmap" {{ 'checked' if tmap_enabled else '' }}> TMAP 대중교통 API 사용 (항공 이동 정보 조회)
     </label>
     {% endif %}
+=======
+    {% if developer_mode %}<label class="chip-checkbox"><input type="checkbox" name="use_tmap" {{ 'checked' if tmap_enabled else '' }}><span>TMAP 항공 이동 정보 사용</span></label>{% endif %}
+>>>>>>> Stashed changes
     <button type="submit" class="btn btn-primary btn-block">여행 조건 적용 후 AI 일정 생성</button>
   </form>
 </div>
@@ -114,6 +122,7 @@
     <details style="margin-top:14px;" open>
       <summary style="cursor:pointer; font-weight:700;">{{ day.date }} · 예상 {{ '%d'|format(day.daily_budget) }}원</summary>
       {% for item in day['items'] %}
+<<<<<<< Updated upstream
         {% if not loop.first %}
         <div style="display:flex; align-items:center; gap:8px; margin:10px 0 4px 14px; color:#4f8bf9;">
           <span style="width:2px; height:24px; background:#4f8bf9;"></span>
@@ -121,6 +130,9 @@
           <span style="padding:3px 10px; border-radius:16px; background:#eef4ff; font-size:12px; font-weight:700;">이동 {{ item.travel_minutes_from_previous }}분</span>
         </div>
         {% endif %}
+=======
+        {% if not loop.first %}<div style="display:flex;align-items:center;gap:8px;margin:10px 0 4px 14px;color:#4f8bf9;"><span style="width:2px;height:24px;background:#4f8bf9;"></span><span style="font-size:18px;">↓</span><span style="padding:3px 10px;border-radius:16px;background:#eef4ff;font-size:12px;font-weight:700;">이동 {{ item.travel_minutes_from_previous }}분</span></div>{% endif %}
+>>>>>>> Stashed changes
         <div style="padding:10px 0; border-bottom:1px solid var(--border);">
           <strong>{{ item.time }} · {{ item.name }}</strong><br>
           <span style="font-size:12px; color:var(--text-muted);">{{ item.category }} · {{ '%d'|format(item.estimated_cost) }}원 · {{ item.address }}</span><br>
@@ -129,11 +141,15 @@
       {% endfor %}
     </details>
   {% endfor %}
+<<<<<<< Updated upstream
   {% if flight_info and profile.transport == '항공' %}
   <p class="planner-flight {{ 'planner-flight-ok' if flight_info.available else '' }}">
     {% if flight_info.available %}TMAP 항공 이동 반영: {{ flight_info.flights[0].departure }} → {{ flight_info.flights[0].arrival }} · 약 {{ flight_info.flights[0].minutes or '-' }}분{% else %}TMAP 항공 이동 정보: {{ flight_info.message }}{% endif %}
   </p>
   {% endif %}
+=======
+  {% if flight_info and profile.transport == '항공' %}<p class="planner-flight">TMAP 항공 이동 정보: {{ flight_info.message or (flight_info.flights[0].departure ~ ' → ' ~ flight_info.flights[0].arrival) }}</p>{% endif %}
+>>>>>>> Stashed changes
 </div>
 {% endif %}
 
@@ -172,12 +188,20 @@
 
 {% if itinerary %}
 <div class="panel">
+<<<<<<< Updated upstream
   <h3 style="margin-top:0;">일정 지도</h3>
   <div class="planner-map-tabs"><button type="button" class="pill active" data-map-date="all">전체 일정</button>{% for d in days %}<button type="button" class="pill" data-map-date="{{ d.isoformat() }}">Day {{ loop.index }} · {{ d.strftime('%m/%d') }}</button>{% endfor %}</div>
   <div id="planner-map" aria-label="일정 동선 지도"></div>
   <p class="planner-map-note">등록된 일정 장소만 순서대로 연결해 표시합니다.</p>
 </div>
 <h3 style="margin:24px 0 12px;">내 일정</h3>
+=======
+  <div class="section-heading">일정 동선</div>
+  <div id="planner-map" style="height:420px;border-radius:14px;overflow:hidden;"></div>
+  <p style="color:var(--text-muted);font-size:12px;margin:12px 0 0;">등록된 일정 장소만 순서대로 연결해 표시합니다.</p>
+</div>
+<div class="section-heading">🧭 내 일정</div>
+>>>>>>> Stashed changes
 {% for d in days %}
   {% set day_items = itinerary_by_day[d.isoformat()] %}
   <div class="panel">
@@ -203,9 +227,13 @@
 {% if itinerary %}
 <div class="next-step-bar" style="margin-top:8px; margin-bottom:20px;">
   <span style="color:var(--text-muted); font-size:14px;">일정이 준비됐어요. 이제 숙소를 골라볼까요?</span>
+<<<<<<< Updated upstream
   <form method="post" action="{{ url_for('planner.next_step') }}">
     <button type="submit" class="btn btn-primary">주변 숙소로 이동 →</button>
   </form>
+=======
+  <form method="post" action="{{ url_for('planner.next_step') }}"><button type="submit" class="btn btn-primary">주변 숙소로 이동 →</button></form>
+>>>>>>> Stashed changes
 </div>
 {% endif %}
 
@@ -218,6 +246,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   const routePoints = {{ route_points|tojson }};
+<<<<<<< Updated upstream
   const mapElement = document.getElementById("planner-map");
   if (routePoints.length && mapElement && window.L) {
     const map = L.map(mapElement, {scrollWheelZoom: false});
@@ -241,6 +270,17 @@
       button.classList.add("active"); drawRoute(button.dataset.mapDate);
     }));
   } else if (mapElement) mapElement.innerHTML = "<p>좌표가 있는 일정 장소가 추가되면 동선 지도가 표시됩니다.</p>";
+=======
+  const mapEl = document.getElementById('planner-map');
+  if (mapEl && routePoints.length && window.L) {
+    const map = L.map(mapEl, {scrollWheelZoom:false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap'}).addTo(map);
+    const coords = routePoints.map(point => [point.latitude, point.longitude]);
+    L.polyline(coords, {color:'#4f8bf9', weight:4}).addTo(map);
+    routePoints.forEach(point => L.circleMarker([point.latitude, point.longitude], {radius:7, color:'#fff', weight:2, fillColor:'#3478f6', fillOpacity:1}).addTo(map).bindPopup(`<strong>${point.time} · ${point.name}</strong><br>${point.date}`));
+    map.fitBounds(L.latLngBounds(coords), {padding:[30,30], maxZoom:13});
+  } else if (mapEl) mapEl.innerHTML = '<p style="padding:20px">좌표가 있는 일정 장소가 추가되면 동선 지도가 표시됩니다.</p>';
+>>>>>>> Stashed changes
 </script>
 {% endif %}
 {% endblock %}
