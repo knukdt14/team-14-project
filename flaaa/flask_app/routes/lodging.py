@@ -8,6 +8,7 @@ Streamlit 버전(views/page3_lodging.py)과 달리 필터/숙박일 상태를 �
 
 import csv
 import io
+import random
 from collections import Counter
 from urllib.parse import parse_qs, urlencode
 
@@ -111,22 +112,16 @@ def _filter_sort(places: list[dict], selected_types: list[str], sort_by: str) ->
     return filtered
 
 
-def _query_url(**overrides) -> str:
+def _query_url(endpoint: str = "lodging.index", **overrides) -> str:
     args = request.args.to_dict(flat=True)
     args.update(overrides)
     args = {k: v for k, v in args.items() if v not in (None, "")}
-    return f"{url_for('lodging.index')}?{urlencode(args)}" if args else url_for("lodging.index")
+    return f"{url_for(endpoint)}?{urlencode(args)}" if args else url_for(endpoint)
 
 
-@lodging_bp.route("/")
-@region_required
-def index():
-    ctx = get_trip_context()
+def _gather(ctx: dict) -> dict:
+    """index()/slot() 둘 다 필요한 검색·필터 결과를 한 번만 계산해서 공유한다."""
     region = ctx["region"]
-
-    if not lodging_service.KAKAO_API_KEY:
-        return render_template("lodging.html", active_step="lodging", api_key_missing=True)
-
     plan = ctx.get("plan") or {}
     route_options = _route_options(plan)
     result = _resolve_search(route_options, region)
@@ -136,23 +131,21 @@ def index():
     type_options, selected_types = _selected_types(all_places)
     sort_by = request.args.get("sort", "distance")
     filtered = _filter_sort(all_places, selected_types, sort_by)
-    place_images = lodging_service.fetch_place_images([p.get("place_url") for p in filtered])
 
     type_filter_links = []
     for t in type_options:
         active = t in selected_types
         new_selected = [x for x in selected_types if x != t] if active else selected_types + [t]
-        type_filter_links.append({"label": t, "active": active, "url": _query_url(type=",".join(new_selected))})
+        type_filter_links.append(
+            {"label": t, "active": active, "url": _query_url("lodging.index", type=",".join(new_selected))}
+        )
 
     distances = [p["distance"] for p in all_places if p.get("distance")]
     night_options_data = [
         {"index": n["night_index"], "label": lodging_service.night_option_label(n)} for n in route_options
     ]
 
-    return render_template(
-        "lodging.html",
-        active_step="lodging",
-        api_key_missing=False,
+    return dict(
         route_options=route_options,
         night_options_data=night_options_data,
         mode=result["mode"],
@@ -171,13 +164,64 @@ def index():
         type_filter_links=type_filter_links,
         sort_by=sort_by,
         filtered=filtered,
-        place_images=place_images,
         lodging_map=ctx.get("lodging", {}),
         favorites=session.get("favorites", {}),
         type_badge_colors=lodging_service.TYPE_BADGE_COLORS,
         type_icons=lodging_service.TYPE_ICONS,
         total_nights=len(route_options),
+    )
+
+
+@lodging_bp.route("/")
+@region_required
+def index():
+    ctx = get_trip_context()
+
+    if not lodging_service.KAKAO_API_KEY:
+        return render_template("lodging.html", active_step="lodging", api_key_missing=True)
+
+    data = _gather(ctx)
+    place_images = lodging_service.fetch_place_images([p.get("place_url") for p in data["filtered"]])
+    slot_url = _query_url("lodging.slot")
+
+    return render_template(
+        "lodging.html",
+        active_step="lodging",
+        api_key_missing=False,
+        place_images=place_images,
+        slot_url=slot_url,
         qs=_query_url,
+        **data,
+    )
+
+
+@lodging_bp.route("/slot")
+@region_required
+def slot():
+    ctx = get_trip_context()
+
+    if not lodging_service.KAKAO_API_KEY:
+        return redirect(url_for("lodging.index"))
+
+    spin_seed = request.args.get("spin", type=int)
+    if spin_seed is None:
+        return redirect(_query_url("lodging.slot", spin=random.randint(1, 999_999)))
+
+    data = _gather(ctx)
+    rng = random.Random(spin_seed)
+    slot_picks = rng.sample(data["filtered"], k=min(3, len(data["filtered"]))) if data["filtered"] else []
+    place_images = lodging_service.fetch_place_images([p.get("place_url") for p in slot_picks])
+
+    return render_template(
+        "lodging_slot.html",
+        active_step="lodging",
+        api_key_missing=False,
+        spin=spin_seed,
+        slot_picks=slot_picks,
+        place_images=place_images,
+        list_url=_query_url("lodging.index"),
+        qs=lambda **kw: _query_url("lodging.slot", **kw),
+        **data,
     )
 
 
@@ -216,6 +260,11 @@ def export_csv():
     )
 
 
+def _redirect_endpoint() -> str:
+    endpoint = request.form.get("redirect_endpoint", "lodging.index")
+    return endpoint if endpoint in ("lodging.index", "lodging.slot") else "lodging.index"
+
+
 @lodging_bp.route("/favorite", methods=["POST"])
 @region_required
 def favorite():
@@ -233,7 +282,7 @@ def favorite():
     else:
         favorites[fav_key] = place
     session.modified = True
-    return redirect(url_for("lodging.index") + request.form.get("redirect_qs", ""))
+    return redirect(url_for(_redirect_endpoint()) + request.form.get("redirect_qs", ""))
 
 
 @lodging_bp.route("/select", methods=["POST"])
@@ -268,4 +317,4 @@ def select():
             parsed["night"] = [str(next_idx)]
             redirect_qs = f"?{urlencode(parsed, doseq=True)}"
 
-    return redirect(url_for("lodging.index") + redirect_qs)
+    return redirect(url_for(_redirect_endpoint()) + redirect_qs)

@@ -11,22 +11,24 @@
 <body>
 <header class="navbar">
   <div class="navbar-inner">
-    <a class="brand" href="{{ url_for('pick.index') }}">🏖️ TripRoll</a>
-    <ol class="stepper">
-      <li class="{{ 'done' if trip_context.get('region') else '' }} {{ 'active' if active_step == 'pick' else '' }}">
-        <a href="{{ url_for('pick.index') }}"><span class="step-num">1</span> 여행지</a>
+    <a class="brand" href="{{ url_for('pick.index') }}"><span class="brand-mark">🏖️</span>TripRoll</a>
+  </div>
+  <nav class="tabbar">
+    <ol class="tabbar-list">
+      <li class="tab {{ 'done' if trip_context.get('region') else '' }} {{ 'active' if active_step == 'pick' else '' }}">
+        <a href="{{ url_for('pick.index') }}"><span class="tab-icon">📍</span><span class="tab-label">여행지</span></a>
       </li>
-      <li class="{{ 'done' if trip_context.get('plan') else '' }} {{ 'active' if active_step == 'planner' else '' }}">
-        <a href="{{ url_for('planner.index') }}"><span class="step-num">2</span> 일정</a>
+      <li class="tab {{ 'done' if trip_context.get('plan') else '' }} {{ 'active' if active_step == 'planner' else '' }}">
+        <a href="{{ url_for('planner.index') }}"><span class="tab-icon">🗓️</span><span class="tab-label">일정</span></a>
       </li>
-      <li class="{{ 'done' if trip_context.get('lodging') else '' }} {{ 'active' if active_step == 'lodging' else '' }}">
-        <a href="{{ url_for('lodging.index') }}"><span class="step-num">3</span> 숙소</a>
+      <li class="tab {{ 'done' if trip_context.get('lodging') else '' }} {{ 'active' if active_step == 'lodging' else '' }}">
+        <a href="{{ url_for('lodging.index') }}"><span class="tab-icon">🏨</span><span class="tab-label">숙소</span></a>
       </li>
-      <li class="{{ 'done' if trip_context.get('insurance') else '' }} {{ 'active' if active_step == 'insurance' else '' }}">
-        <a href="{{ url_for('insurance.index') }}"><span class="step-num">4</span> 보험</a>
+      <li class="tab {{ 'done' if trip_context.get('insurance') else '' }} {{ 'active' if active_step == 'insurance' else '' }}">
+        <a href="{{ url_for('insurance.index') }}"><span class="tab-icon">🛡️</span><span class="tab-label">보험</span></a>
       </li>
     </ol>
-  </div>
+  </nav>
 </header>
 <main class="page">
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -38,8 +40,21 @@
       </div>
     {% endif %}
   {% endwith %}
+  {% block hero %}{% endblock %}
   {% block content %}{% endblock %}
 </main>
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-brand"><span class="brand-mark">🏖️</span> TripRoll</div>
+    <ol class="site-footer-links">
+      <li><a href="{{ url_for('pick.index') }}">여행지 추첨</a></li>
+      <li><a href="{{ url_for('planner.index') }}">여행 플래너</a></li>
+      <li><a href="{{ url_for('lodging.index') }}">주변 숙소</a></li>
+      <li><a href="{{ url_for('insurance.index') }}">여행자 보험</a></li>
+    </ol>
+    <p class="site-footer-note">팀 프로젝트로 제작된 서비스입니다. 실제 예약·결제 기능은 제공하지 않습니다.</p>
+  </div>
+</footer>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>

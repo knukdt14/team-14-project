@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}랜덤 숙소 뽑기 · TripRoll{% endblock %}
+{% block hero %}
+<div class="hero hero-slot">
+  <span class="hero-badge">🎰 동선 기반 랜덤 뽑기</span>
+  <h1 class="hero-title">고르기 힘드니까,<br>기계가 3곳만 골라드릴게요</h1>
+  <p class="hero-sub">
+    {% if center %}{{ center.label }} 주변 {{ radius }}m 후보 중 3곳을 무작위로 뽑았어요.{% else %}조건에 맞는 후보 중 3곳을 무작위로 뽑았어요.{% endif %}
+  </p>
+</div>
+{% endblock %}
+{% block content %}
+
+<div class="panel" style="text-align:center;">
+  <a class="btn btn-outline btn-sm" href="{{ list_url }}">📋 전체 목록에서 직접 고르기</a>
+</div>
+
+{% if error %}
+  <div class="panel"><span style="color:#b3261e; font-weight:700;">{{ error }}</span></div>
+{% elif not slot_picks %}
+  <div class="panel empty-state">뽑을 후보가 없습니다. 반경을 넓히거나 필터를 조정해보세요.</div>
+{% else %}
+  <div class="slot-machine">
+    <div class="slot-machine-head">🎰 SLOT MACHINE</div>
+    <div class="slot-reels">
+      {% set redirect_endpoint = 'lodging.slot' %}
+      {% for place in slot_picks %}
+        <div class="slot-reel">
+          <div class="slot-reel-symbols" style="animation-delay: {{ loop.index0 * 0.12 }}s;" aria-hidden="true">
+            {% for sym in ['🏨','🏡','🛎️','🌊','✨','🏨','🏡','🛎️','🌊','✨','🏨','🏡'] %}<span>{{ sym }}</span>{% endfor %}
+          </div>
+          <div class="slot-reel-card" style="animation-delay: {{ 0.85 + loop.index0 * 0.12 }}s;">
+            {% include "partials/lodging_card.html" %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="slot-machine-foot">
+      <a class="btn btn-primary btn-lever" href="{{ qs(spin=spin + 1) }}">🎲 다시 돌리기</a>
+    </div>
+  </div>
+{% endif %}
+
+{% if lodging_map %}
+<div class="next-step-bar" style="margin-top:24px;">
+  <span style="color:var(--text-muted); font-size:14px;">현재 {{ lodging_map|length }}개 숙박일의 숙소가 저장되어 있습니다.</span>
+  <a class="btn btn-primary" href="{{ url_for('insurance.index') }}">다음 단계로 (여행자 보험) →</a>
+</div>
+{% endif %}
+
+{% endblock %}
