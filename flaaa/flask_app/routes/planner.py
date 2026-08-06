@@ -6,6 +6,7 @@ services/planner.py의 파이프라인만 갈아끼웠다.
 """
 
 import json
+import os
 from datetime import date, timedelta
 from uuid import uuid4
 
@@ -19,7 +20,7 @@ from services.tour_api import TourApiError
 planner_bp = Blueprint("planner", __name__, url_prefix="/planner")
 
 RELATIONSHIPS = ["가족", "부부", "연인", "친구", "동료", "혼자"]
-TRANSPORT = ["자가용", "대중교통", "렌터카", "도보 중심"]
+TRANSPORT = ["자동차", "대중교통", "항공", "도보 중심"]
 STYLE_OPTIONS = ["맛집", "관광", "자연", "문화·역사", "카페", "액티비티", "휴식", "아이 동반"]
 CATEGORIES = ["관광지", "음식점", "문화시설", "축제", "숙소", "기타"]
 
@@ -34,7 +35,7 @@ def _default_profile(region: dict) -> dict:
         "count": 2,
         "relationship": "친구",
         "departure": origin.get("name", "출발지 미입력"),
-        "transport": "자가용",
+        "transport": "자동차",
         "budget": 300000,
         "styles": ["맛집", "관광"],
         "preferences": "",
@@ -88,9 +89,22 @@ def _sync_context(region: dict) -> None:
             "summary": (plan or {}).get("summary", "직접 구성한 일정"),
             "itinerary": items,
             "center": center,
+            "transportation": profile.get("transport"), "flight_operation": session.get("planner_flight_info"), "route_points": _route_points(items),
             "retrieval_query": session.get("planner_query", ""),
         },
     )
+
+
+def _route_points(items: list[dict]) -> list[dict]:
+    return [{key: item[key] for key in ("name", "latitude", "longitude", "date", "time")} | {"kind": "schedule"} for item in sorted(items, key=lambda value: (value["date"], value["time"])) if item.get("latitude") is not None and item.get("longitude") is not None]
+
+
+def _profile_from_form(form) -> tuple[dict | None, str | None]:
+    try:
+        start, end = date.fromisoformat(form["start"]), date.fromisoformat(form["end"]); count, budget = min(20, max(1, int(form.get("count") or 2))), min(5_000_000, max(50_000, int(form.get("budget") or 300000)))
+    except (KeyError, ValueError): return None, "여행 날짜, 인원, 예산을 올바르게 입력해 주세요."
+    if end < start or (end - start).days > 13: return None, "여행 날짜는 시작일 이후이며 최대 14일이어야 합니다."
+    return {"title": form.get("title") or "국내 여행", "start": start.isoformat(), "end": end.isoformat(), "count": count, "relationship": form.get("relationship") or "친구", "departure": form.get("departure") or "출발지 미입력", "transport": form.get("transport") if form.get("transport") in TRANSPORT else "자동차", "budget": budget, "styles": form.getlist("styles"), "preferences": form.get("preferences", "")}, None
 
 
 @planner_bp.route("/")
@@ -127,6 +141,7 @@ def index():
         plan=session.get("planner_llm"),
         itinerary=itinerary,
         itinerary_by_day=itinerary_by_day,
+        route_points=_route_points(itinerary), flight_info=session.get("planner_flight_info"), developer_mode=os.getenv("DEVELOPER_MODE", "").lower() in {"1", "true", "yes", "on"}, tmap_enabled=session.get("planner_use_tmap", False),
     )
 
 
@@ -170,19 +185,23 @@ def set_profile():
 @region_required
 def generate():
     region = get_trip_context()["region"]
-    profile = session.get("planner_profile")
+    profile, error = _profile_from_form(request.form)
+    if error:
+        flash(error, "error"); return redirect(url_for("planner.index"))
+    session["planner_profile"] = profile; session["planner_region_key"] = region["name"]; session["planner_candidates"] = []; session["planner_llm"] = None; session["planner_itinerary"] = []; session["planner_use_tmap"] = request.form.get("use_tmap") == "on"
     if not profile:
         flash("먼저 여행 조건을 적용해 주세요.", "warning")
         return redirect(url_for("planner.index"))
 
     start = date.fromisoformat(profile["start"])
     end = date.fromisoformat(profile["end"])
+    flight_info = planner_service.load_flight_info(region, get_trip_context().get("origin", {}), start, profile["transport"], session.get("planner_use_tmap", False))
     full_profile = planner_service.build_profile(
         region,
         {
             "start": start, "end": end, "departure": profile["departure"], "count": profile["count"],
             "relationship": profile["relationship"], "transport": profile["transport"],
-            "budget": profile["budget"], "styles": profile["styles"], "preferences": profile["preferences"],
+            "budget": profile["budget"], "styles": profile["styles"], "preferences": profile["preferences"], "flight_operation": flight_info,
         },
     )
     try:
@@ -198,7 +217,10 @@ def generate():
     session["planner_candidates"] = result["candidates"]
     session["planner_query"] = result["query"]
     session["planner_mode"] = result["mode"]
+    session["planner_flight_info"] = flight_info
+    session["planner_itinerary"] = [{"id": str(uuid4()), "date": day["date"], **item} for day in result["plan"]["itinerary"] for item in day["items"]]
     session.modified = True
+    _sync_context(region)
     flash("TourAPI 근거 기반 AI 일정을 생성했습니다.", "success")
     return redirect(url_for("planner.index"))
 
@@ -267,6 +289,16 @@ def delete_item(item_id: str):
     session.modified = True
     _sync_context(region)
     return redirect(url_for("planner.index"))
+
+
+@planner_bp.route("/next", methods=["POST"])
+@region_required
+def next_step():
+    region = get_trip_context()["region"]
+    if not session.get("planner_itinerary"):
+        flash("일정을 생성하거나 직접 추가한 뒤 숙소 선택으로 이동할 수 있습니다.", "warning"); return redirect(url_for("planner.index"))
+    _sync_context(region)
+    return redirect(url_for("lodging.index"))
 
 
 @planner_bp.route("/export.json")
