@@ -1,0 +1,18 @@
+<div class="panel dart-panel">
+  <p class="dart-instructions">아래쪽 다트를 <strong>아래로 당겼다가 놓으세요.</strong> 당긴 만큼 멀리 날아갑니다. 밝은 지역이 조건에 맞는 곳입니다.</p>
+  <div id="dart-stage"></div>
+  <div id="dart-tip">당겼다가 놓아서 던지세요</div>
+</div>
+
+<form id="dart-throw-form" method="post" action="{{ dart_throw_url }}" style="display:none;">
+  {% include "partials/pick_filter_hidden.html" %}
+  <input type="hidden" name="x" id="dart-x">
+  <input type="hidden" name="y" id="dart-y">
+  <input type="hidden" name="name" id="dart-name">
+</form>
+
+<script>
+  window.DART_POOL_NAMES = {{ pool_names | tojson }};
+  window.DART_MAP_URL = {{ map_data_url | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/dart.js') }}"></script>

@@ -12,6 +12,7 @@
 <div class="search-float">
 <div class="panel">
   <form method="get" action="{{ url_for('pick.index') }}">
+    <input type="hidden" name="mode" value="{{ mode }}">
     <div class="form-row">
       <div class="form-group">
         <label for="origin">📍 출발지</label>
@@ -34,38 +35,33 @@
       <label class="chip-checkbox"><input type="checkbox" name="coastal" value="1" {{ 'checked' if filters.coastal_only else '' }}><span>🌊 바다 있는 곳만</span></label>
       <label class="chip-checkbox"><input type="checkbox" name="exclude_metro" value="1" {{ 'checked' if filters.exclude_metro else '' }}><span>🏙️ 광역시 제외</span></label>
     </div>
+    <div class="pill-group" style="margin:14px 0 2px;">
+      <a class="pill {{ 'active' if mode == 'card' else '' }}" href="{{ url_for('pick.index') }}{{ filter_qs }}&mode=card">🎴 카드 뽑기</a>
+      <a class="pill {{ 'active' if mode == 'dart' else '' }}" href="{{ url_for('pick.index') }}{{ filter_qs }}&mode=dart">🎯 다트 던지기</a>
+    </div>
     <hr class="divider">
     <div class="form-row" style="align-items:center; justify-content:space-between;">
-      {% if pool_count < 3 %}
-        <span>후보가 <strong>{{ pool_count }}곳</strong>뿐입니다. 조건을 조금 풀어 주세요.</span>
-      {% else %}
-        <span>조건에 맞는 여행지 <strong>{{ pool_count }}곳</strong>에서 3장을 뽑습니다.</span>
-      {% endif %}
-      <div style="display:flex; gap:8px;">
+      {% if mode == 'dart' %}
+        {% if pool_count == 0 %}
+          <span>조건에 맞는 곳이 없습니다. 조건을 조금 풀어 주세요.</span>
+        {% else %}
+          <span>조건에 맞는 여행지 <strong>{{ pool_count }}곳</strong>이 지도에 밝게 표시됩니다. 직접 겨눠서 던지세요.</span>
+        {% endif %}
         <button type="submit" class="btn btn-outline">조건 적용</button>
-        <button type="submit" formmethod="post" formaction="{{ url_for('pick.draw') }}" class="btn btn-primary" {{ 'disabled' if not can_draw else '' }}>카드 뽑기</button>
-      </div>
+      {% else %}
+        {% if pool_count < 3 %}
+          <span>후보가 <strong>{{ pool_count }}곳</strong>뿐입니다. 조건을 조금 풀어 주세요.</span>
+        {% else %}
+          <span>조건에 맞는 여행지 <strong>{{ pool_count }}곳</strong>에서 3장을 뽑습니다.</span>
+        {% endif %}
+        <div style="display:flex; gap:8px;">
+          <button type="submit" class="btn btn-outline">조건 적용</button>
+          <button type="submit" formmethod="post" formaction="{{ url_for('pick.draw') }}" class="btn btn-primary" {{ 'disabled' if not can_draw else '' }}>카드 뽑기</button>
+        </div>
+      {% endif %}
     </div>
   </form>
 </div>
-</div>
-
-<div class="feature-grid">
-  <div class="feature-item">
-    <div class="feature-icon">🎯</div>
-    <div class="feature-title">조건 기반 매칭</div>
-    <div class="feature-desc">거리·해안·광역시 조건으로 후보를 좁혀요</div>
-  </div>
-  <div class="feature-item">
-    <div class="feature-icon">🗓️</div>
-    <div class="feature-title">AI 일정 자동 구성</div>
-    <div class="feature-desc">실제 TourAPI 장소로 날짜별 일정을 짜요</div>
-  </div>
-  <div class="feature-item">
-    <div class="feature-icon">🏨</div>
-    <div class="feature-title">동선 맞춤 숙소</div>
-    <div class="feature-desc">일정 사이 가장 가까운 숙소를 찾아줘요</div>
-  </div>
 </div>
 
 {% if confirmed %}
@@ -91,6 +87,47 @@
       <button type="submit" class="btn btn-primary btn-block">여행 플래너로 이동</button>
     </form>
   </div>
+
+{% elif mode == 'dart' %}
+  {% if not dart %}
+    {% include "partials/dart_canvas.html" %}
+  {% elif not dart.region %}
+    <div class="panel dart-panel">
+      <div class="dart-result">
+        {% if dart.land %}
+          <div class="place miss">{{ dart.land }}</div>
+          <div class="note">조건에 맞지 않는 지역입니다. 다시 던져 주세요.</div>
+        {% else %}
+          <div class="place miss">바다에 빠졌다</div>
+          <div class="note">아무 데도 안 꽂혔습니다. 다시 던져 주세요.</div>
+        {% endif %}
+        <div class="coord">{{ dart.point[0] }}, {{ dart.point[1] }}</div>
+      </div>
+      <form method="post" action="{{ dart_retry_url }}" style="margin-top:16px;">
+        {% include "partials/pick_filter_hidden.html" %}
+        <button type="submit" class="btn btn-primary btn-block">다시 던지기</button>
+      </form>
+    </div>
+  {% else %}
+    {% set r = dart.region %}
+    <div class="panel dart-panel">
+      <div class="dart-result">
+        <div class="place">{{ r.name }}</div>
+        <div class="note">출발지에서 약 {{ r.distance_km|int }}km · {{ dart.grade }}</div>
+        <div class="coord">{{ dart.point[0] }}, {{ dart.point[1] }}</div>
+      </div>
+      <div class="form-row" style="margin-top:16px;">
+        <form method="post" action="{{ dart_retry_url }}" style="flex:1;">
+          {% include "partials/pick_filter_hidden.html" %}
+          <button type="submit" class="btn btn-outline btn-block">다시 던지기</button>
+        </form>
+        <form method="post" action="{{ dart_confirm_url }}" style="flex:1;">
+          {% include "partials/pick_filter_hidden.html" %}
+          <button type="submit" class="btn btn-primary btn-block">이걸로 결정</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
 
 {% elif not cards %}
   <div class="panel empty-state">위에서 조건을 정하고 <strong>카드 뽑기</strong>를 눌러 주세요.</div>

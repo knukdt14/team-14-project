@@ -23,14 +23,9 @@
 </div>
 
 {% if tab == 'premium' %}
-<div class="panel">
-  <p style="margin:0 0 4px; font-weight:800;">담당: C 축 (보험료 계산)</p>
-  <p style="margin:0 0 16px; color:var(--text-muted); font-size:14px;">이 페이지는 아직 준비 중입니다. 아래 항목을 채우면 됩니다.</p>
-  <ul style="margin:0; padding-left:20px; line-height:1.9;">
-    {% for item in todo_items %}
-      <li>{{ item }}</li>
-    {% endfor %}
-  </ul>
+<div class="panel empty-state">
+  <div style="font-size:15px; font-weight:700; color:var(--text);">보험료 계산 기능을 준비하고 있어요</div>
+  <div style="margin-top:6px;">곧 이용하실 수 있도록 열심히 만들고 있습니다.</div>
 </div>
 
 {% else %}
@@ -79,11 +74,6 @@
       </div>
       <div class="rag-section-label">💬 쉬운 설명</div>
       <div class="friendly-box">{{ friendly_text(parsed.verdict)|safe }}</div>
-      <details style="margin:10px 0 18px;">
-        <summary style="cursor:pointer; font-size:13px; color:var(--text-muted);">분류 정보 보기 (디버그용)</summary>
-        <p style="font-size:13px;">분류된 문제 유형: {{ turn.result.intent }}</p>
-        <p style="font-size:13px;">처리 방식: {{ turn.result.mode }}</p>
-      </details>
       <hr class="divider">
     {% endfor %}
 
