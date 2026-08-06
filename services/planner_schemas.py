@@ -26,7 +26,7 @@ class DayPlan(BaseModel):
 
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     daily_budget: int = Field(ge=0)
-    items: list[ScheduleItem] = Field(min_length=2, max_length=8)
+    items: list[ScheduleItem] = Field(min_length=3, max_length=6)
 
 
 class TravelPlan(BaseModel):

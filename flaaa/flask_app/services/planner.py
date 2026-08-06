@@ -16,6 +16,7 @@ from datetime import date, timedelta
 import numpy as np
 import requests
 from huggingface_hub import InferenceClient
+from json_repair import repair_json
 from pydantic import ValidationError
 
 from flask_app.services.cache import cache
@@ -95,7 +96,8 @@ def retrieve_candidates(region: dict, profile: dict, start: date, end: date) -> 
     def embed(text: str) -> np.ndarray:
         return np.asarray(_embed_cached(text, model, hf_token), dtype=np.float32)
 
-    ranked, mode = rank_candidates(candidates, query, embed, min(8, int(os.getenv("RAG_TOP_K", "12"))))
+    required_unique_places = max(12, ((end - start).days + 1) * 6)
+    ranked, mode = rank_candidates(candidates, query, embed, min(len(candidates), max(required_unique_places, int(os.getenv("RAG_TOP_K", "12")))))
     logger.warning("[Planner RAG] input=%d ranked=%d mode=%s", len(candidates), len(ranked), mode)
     if not ranked:
         raise ValueError(f"이 지역에서 일정 후보 장소를 찾지 못했습니다. (TourAPI 후보 {len(candidates)}개, RAG 후보 {len(ranked)}개)")
@@ -129,6 +131,10 @@ def validate_plan(plan: TravelPlan, dates: list[str], allowed_ids: set[str], bud
     invalid = {item.content_id for day in plan.itinerary for item in day.items if item.content_id not in allowed_ids}
     if invalid:
         raise ValueError(f"TourAPI 후보에 없는 장소가 포함되었습니다: {', '.join(sorted(invalid))}")
+    content_ids = [item.content_id for day in plan.itinerary for item in day.items]
+    duplicates = {content_id for content_id in content_ids if content_ids.count(content_id) > 1}
+    if duplicates:
+        raise ValueError(f"같은 장소가 여행 전체에 중복되었습니다: {', '.join(sorted(duplicates))}")
     if plan.total_estimated_cost > budget_per_person:
         raise BudgetExceededError(f"1인 예상 총비용 {plan.total_estimated_cost:,}원이 1인 예산을 초과했습니다.")
 
@@ -181,10 +187,19 @@ def parse_llm_plan(content: str) -> TravelPlan:
                 break
             except json.JSONDecodeError as error:
                 if "Expecting ',' delimiter" not in error.msg or error.pos >= len(repaired):
-                    raise
+                    data = repair_json(repaired, return_objects=True)
+                    break
                 repaired = repaired[:error.pos] + "," + repaired[error.pos:]
         else:
-            data = json.loads(repaired)
+            data = repair_json(repaired, return_objects=True)
+    # A model can occasionally emit one extra stop despite the prompt.  This
+    # is a presentation-limit violation, not a reason to discard an otherwise
+    # complete itinerary.  Keep the first six chronological entries; costs are
+    # recalculated immediately after parsing by ``normalize_plan_costs``.
+    if isinstance(data, dict) and isinstance(data.get("itinerary"), list):
+        for day in data["itinerary"]:
+            if isinstance(day, dict) and isinstance(day.get("items"), list):
+                day["items"] = day["items"][:6]
     return TravelPlan.model_validate(data)
 
 
@@ -197,6 +212,29 @@ def normalize_plan_costs(plan: TravelPlan) -> TravelPlan:
         day["daily_budget"] = daily
         total += daily
     data["total_estimated_cost"] = total
+    return TravelPlan.model_validate(data)
+
+
+def replace_duplicate_places(plan: TravelPlan, candidates: list[dict]) -> TravelPlan:
+    """Replace repeated LLM choices with unused TourAPI candidates when possible."""
+    data = plan.model_dump()
+    seen: set[str] = set()
+    unused = list(candidates)
+    for day in data["itinerary"]:
+        for item in day["items"]:
+            content_id = str(item["content_id"])
+            if content_id not in seen:
+                seen.add(content_id)
+                unused = [candidate for candidate in unused if str(candidate["content_id"]) != content_id]
+                continue
+            replacement = next((candidate for candidate in unused if candidate.get("category") == item["category"]), None)
+            replacement = replacement or (unused[0] if unused else None)
+            if not replacement:
+                continue
+            item.update({key: replacement.get(key) for key in ("content_id", "name", "category", "address", "latitude", "longitude")})
+            item["memo"] = "중복 없는 동선을 위해 추천 후보로 교체한 일정입니다."
+            seen.add(str(replacement["content_id"]))
+            unused.remove(replacement)
     return TravelPlan.model_validate(data)
 
 
@@ -266,12 +304,15 @@ def generate_plan(region: dict, profile: dict, start: date, end: date) -> dict:
     """
     candidates, query, mode = retrieve_candidates(region, profile, start, end)
     dates = [d.isoformat() for d in days_between(start, end)]
-    max_items_per_day = max(2, min(5, int(profile["budget_per_person"]) // max(len(dates), 1) // 30_000))
-    min_items_per_day = 3 if max_items_per_day >= 3 else 2
+    # Never ask the model for more unique places per day than the retrieved
+    # candidate pool can support across the whole trip.
+    candidate_limit_per_day = max(3, len(candidates) // max(len(dates), 1))
+    max_items_per_day = max(3, min(6, candidate_limit_per_day, int(profile["budget_per_person"]) // max(len(dates), 1) // 30_000))
+    min_items_per_day = 3
     messages = [
         {"role": "system", "content": "Use candidate latitude/longitude to make each day a geographically efficient route. Keep the item array in real visit order, group nearby places, avoid backtracking, and give realistic chronological times and travel_minutes_from_previous. Prioritize the traveller's styles, companion preferences, and free-text request. If restaurant candidates exist, include a meal stop at 11:30-13:30 or 17:30-20:30."},
         {"role": "system", "content": "Return JSON only. Required root fields: summary, total_estimated_cost, itinerary. Every itinerary entry has date, daily_budget, items. Every item has time, content_id, name, category, address, latitude, longitude, duration_minutes, travel_minutes_from_previous, estimated_cost, memo. Use only supplied content_id values and include every requested date once."},
-        {"role": "system", "content": f"Budget is a hard per-person limit of {profile['budget_per_person']} KRW. Do not use all candidates: choose only the best affordable places. Schedule {min_items_per_day} to {max_items_per_day} items per day (target 3-5 when the budget allows), and make total_estimated_cost no greater than the budget."},
+        {"role": "system", "content": f"Budget is a hard per-person limit of {profile['budget_per_person']} KRW. Choose only the best affordable places. Schedule {min_items_per_day} to {max_items_per_day} items per day, never reuse the same content_id anywhere in the trip, and make total_estimated_cost no greater than the budget."},
         {"role": "user", "content": build_prompt(profile, candidates, dates)},
     ]
     allowed_ids = {item["content_id"] for item in candidates}
@@ -286,7 +327,7 @@ def generate_plan(region: dict, profile: dict, start: date, end: date) -> dict:
                 messages.append({"role": "user", "content": "JSON 본문이 비어 있었습니다. JSON만 다시 출력하세요."}); continue
             raise
         try:
-            plan = normalize_plan_costs(parse_llm_plan(text))
+            plan = normalize_plan_costs(replace_duplicate_places(parse_llm_plan(text), candidates))
             validate_plan(plan, dates, allowed_ids, int(profile["budget_per_person"]))
             return {"plan": plan.model_dump(mode="json"), "candidates": candidates, "query": query, "mode": mode}
         except BudgetExceededError as error:

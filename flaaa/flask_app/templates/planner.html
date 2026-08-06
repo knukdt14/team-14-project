@@ -163,6 +163,14 @@
 </div>
 {% endif %}
 
+{% if itinerary %}
+<section class="panel mission-game" aria-labelledby="mission-game-title">
+  <div class="mission-game-head"><div><p>TRIP BONUS</p><h2 id="mission-game-title">오늘의 랜덤 미션</h2><span>일정 사이에 가볍게 즐겨보세요. 일정과 예산에는 영향을 주지 않습니다.</span></div><button id="mission-draw" type="button" class="btn btn-primary">🎴 미션 뽑기</button></div>
+  <div id="mission-card" class="mission-card is-covered"><span class="mission-card-mark">✦</span><strong>카드를 뽑아 여행에 작은 재미를 더해보세요</strong></div>
+  <button id="mission-complete" type="button" class="btn btn-outline btn-sm" hidden>✓ 미션 완료</button>
+</section>
+{% endif %}
+
 <a class="btn btn-outline btn-block" href="{{ url_for('planner.export_json') }}">JSON으로 일정 저장</a>
 {% endblock %}
 
@@ -187,6 +195,57 @@
   relationship.addEventListener('change', updateSummary);
 })();
 </script>
+{% if itinerary %}
+<script>
+(() => {
+  const missions = [
+    '현지 카페에서 지역 메뉴 하나 먹어보기', '여행지 풍경 사진 세 장 남기기',
+    '시장이나 로컬 상점 한 곳 들러보기', '일몰 또는 야경 사진 찍기',
+    '30분 동안 지도 없이 천천히 산책하기', '동행에게 오늘의 베스트 장소를 물어보기',
+    '지역 특산품 하나 찾아보기', '지금 가장 마음에 드는 장면을 기록하기'
+  ];
+  const draw = document.getElementById('mission-draw'), card = document.getElementById('mission-card'), complete = document.getElementById('mission-complete');
+  if (!draw || !card || !complete) return;
+  let used = [];
+  draw.addEventListener('click', () => {
+    const choices = missions.filter((_, index) => !used.includes(index));
+    if (!choices.length) used = [];
+    const mission = (choices.length ? choices : missions)[Math.floor(Math.random() * (choices.length ? choices.length : missions.length))];
+    used.push(missions.indexOf(mission));
+    card.className = 'mission-card is-revealed';
+    card.innerHTML = `<span class="mission-card-label">TODAY'S MISSION</span><strong>${mission}</strong>`;
+    complete.hidden = false; complete.textContent = '✓ 미션 완료'; complete.classList.remove('is-complete');
+    draw.textContent = '🔄 다시 뽑기';
+  });
+  complete.addEventListener('click', () => { complete.classList.toggle('is-complete'); complete.textContent = complete.classList.contains('is-complete') ? '✓ 완료했어요!' : '✓ 미션 완료'; });
+})();
+</script>
+{% endif %}
+{% if itinerary %}
+<script>
+(() => {
+  const itemsByDay = {{ itinerary_by_day|tojson }};
+  const days = Object.keys(itemsByDay);
+  const game = document.querySelector('.mission-game');
+  if (!game) return;
+  game.innerHTML = `<div class="mission-game-head"><div><p>TRIP BONUS</p><h2>날짜별 랜덤 미션</h2><span>각 날짜 일정과 연결된 미션입니다. 날짜별 리롤은 3회까지예요.</span></div></div><div class="mission-grid">${days.map((day, index) => `<article class="mission-day-card" data-day="${day}"><div class="mission-day-label">Day ${index + 1}</div><div class="mission-card is-covered"><span class="mission-card-mark">✦</span><strong>이 날의 미션을 뽑아보세요</strong></div><div class="mission-actions"><button type="button" class="btn btn-primary btn-sm">🎴 미션 뽑기</button><button type="button" class="btn btn-outline btn-sm" hidden>✓ 완료</button><span>리롤 3회 남음</span></div></article>`).join('')}</div>`;
+  const missionFor = place => {
+    const name = place?.name || '오늘의 장소', category = place?.category || '';
+    const missions = category === '음식점' ? [
+      `“${name}”에서 가장 기억에 남는 메뉴를 한 줄로 기록하기`, `“${name}”의 메뉴 중 처음 보는 이름 하나 찾아보기`, `“${name}”에서 동행과 서로 다른 메뉴를 골라 한 입씩 나눠 먹기`, `“${name}”의 분위기를 담은 사진 한 장 남기기`
+    ] : category === '문화시설' ? [
+      `“${name}”에서 마음에 든 장면 한 장 남기기`, `“${name}”에서 가장 흥미로운 이야기 하나 찾아보기`, `“${name}”을 보고 떠오른 단어 세 개 적기`, `“${name}”에서 동행에게 추천하고 싶은 포인트 하나 고르기`
+    ] : category === '축제' ? [
+      `“${name}”의 분위기가 느껴지는 사진 한 장 남기기`, `“${name}”에서 가장 신나는 순간을 찾아보기`, `“${name}”의 로컬 먹거리나 기념품 하나 발견하기`, `“${name}”에서 오늘의 여행 BGM을 정하기`
+    ] : [
+      `“${name}”에서 나만의 포토 스팟 찾기`, `“${name}” 주변에서 마음에 드는 색 하나 찾기`, `“${name}”에서 5분간 천천히 풍경 감상하기`, `“${name}”을 동행에게 한 문장으로 소개하기`, `“${name}”에서 가장 재미있는 디테일 하나 기록하기`
+    ];
+    return missions[Math.floor(Math.random() * missions.length)];
+  };
+  game.querySelectorAll('.mission-day-card').forEach(dayCard => { const places = itemsByDay[dayCard.dataset.day] || []; const card = dayCard.querySelector('.mission-card'), [draw, done] = dayCard.querySelectorAll('button'); const counter = dayCard.querySelector('.mission-actions span'); let rerolls = 3, drawn = false; draw.onclick = () => { const place = places[Math.floor(Math.random() * places.length)]; if (drawn) rerolls--; drawn = true; card.className='mission-card is-revealed'; card.innerHTML=`<span class="mission-card-label">DAY MISSION</span><strong>${missionFor(place)}</strong>`; done.hidden=false; draw.textContent='🔄 리롤'; counter.textContent=`리롤 ${rerolls}회 남음`; draw.disabled=rerolls<=0; }; done.onclick = () => { done.classList.toggle('is-complete'); done.textContent=done.classList.contains('is-complete')?'✓ 완료했어요!':'✓ 완료'; }; });
+})();
+</script>
+{% endif %}
 {% if itinerary %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
