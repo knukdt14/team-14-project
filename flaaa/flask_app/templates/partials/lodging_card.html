@@ -6,12 +6,16 @@
 {% set is_selected = lodging_map.get(night_key, {}).get('name') == place.place_name %}
 {% set addr = place.road_address_name or place.address_name or '' %}
 {% set redirect_qs = ('?' ~ request.query_string.decode()) if request.query_string else '' %}
-<div class="card">
-  {% if img %}
-    <img class="card-img" src="{{ img }}" alt="{{ place.place_name }}" onerror="this.remove()">
-  {% else %}
-    <div class="card-noimg" style="background:{{ badge_color }};">{{ icon }}</div>
-  {% endif %}
+<div class="card listing-card">
+  <div class="listing-media">
+    {% if img %}
+      <img class="card-img" src="{{ img }}" alt="{{ place.place_name }}" onerror="this.remove()">
+    {% else %}
+      <div class="card-noimg" style="background:{{ badge_color }};">{{ icon }}</div>
+    {% endif %}
+    <span class="listing-chip" style="background:{{ badge_color }};">{{ icon }} {{ place.kind }}</span>
+    {% if is_selected %}<span class="listing-chip listing-chip-selected">✓ 선택됨</span>{% endif %}
+  </div>
   <div class="card-body">
     <div class="card-name-row">
       {% if place.place_url %}
@@ -19,8 +23,6 @@
       {% else %}
         <span class="card-name">{{ place.place_name }}</span>
       {% endif %}
-      <span class="badge" style="background:{{ badge_color }};">{{ place.kind }}</span>
-      {% if is_selected %}<span class="card-selected">✓ 선택됨</span>{% endif %}
     </div>
     <div class="card-addr" title="{{ addr }}">{{ addr }}</div>
     <div class="card-meta-row">
@@ -35,6 +37,7 @@
         <input type="hidden" name="phone" value="{{ place.phone or '' }}">
         <input type="hidden" name="place_url" value="{{ place.place_url or '' }}">
         <input type="hidden" name="redirect_qs" value="{{ redirect_qs }}">
+        <input type="hidden" name="redirect_endpoint" value="{{ redirect_endpoint | default('lodging.index') }}">
         <button class="btn btn-outline btn-sm btn-block" type="submit">{{ '💛 찜 해제' if is_favorite else '🤍 찜하기' }}</button>
       </form>
       <form method="post" action="{{ url_for('lodging.select') }}" data-once style="flex:1;">
@@ -50,6 +53,7 @@
         <input type="hidden" name="y" value="{{ place.y }}">
         <input type="hidden" name="total_nights" value="{{ total_nights }}">
         <input type="hidden" name="redirect_qs" value="{{ redirect_qs }}">
+        <input type="hidden" name="redirect_endpoint" value="{{ redirect_endpoint | default('lodging.index') }}">
         <button class="btn {{ 'btn-outline' if is_selected else 'btn-primary' }} btn-sm btn-block" type="submit">{{ '✓ 선택됨' if is_selected else '이 숙소로 정하기' }}</button>
       </form>
     </div>

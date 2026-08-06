@@ -1,14 +1,20 @@
 {% extends "base.html" %}
 {% block title %}여행지 추첨 · TripRoll{% endblock %}
+{% block hero %}
+<div class="hero">
+  <span class="hero-badge">✈️ STEP 1 · 여행지 추첨</span>
+  <h1 class="hero-title">고민은 여기까지,<br>갈 곳은 카드가 정해드려요</h1>
+  <p class="hero-sub">조건만 정하면 어울리는 여행지 3장을 뽑아드립니다. 마음에 드는 카드를 열어보세요.</p>
+</div>
+{% endblock %}
 {% block content %}
-<div class="page-title">여행지 추첨</div>
-<div class="page-sub">고민은 여기까지. 조건만 정하면 갈 곳은 카드가 정해 줍니다.</div>
 
+<div class="search-float">
 <div class="panel">
   <form method="get" action="{{ url_for('pick.index') }}">
     <div class="form-row">
       <div class="form-group">
-        <label for="origin">출발지</label>
+        <label for="origin">📍 출발지</label>
         <select id="origin" name="origin">
           {% for n in names %}
             <option value="{{ n }}" {{ 'selected' if n == filters.origin_name else '' }}>{{ n }}</option>
@@ -16,7 +22,7 @@
         </select>
       </div>
       <div class="form-group">
-        <label for="distance">이동 거리 상한</label>
+        <label for="distance">📏 이동 거리 상한</label>
         <select id="distance" name="distance">
           {% for d in distance_options %}
             <option value="{{ d }}" {{ 'selected' if d == filters.distance else '' }}>{{ d }}</option>
@@ -25,8 +31,8 @@
       </div>
     </div>
     <div class="form-row">
-      <label class="checkbox-row"><input type="checkbox" name="coastal" value="1" {{ 'checked' if filters.coastal_only else '' }}> 바다 있는 곳만</label>
-      <label class="checkbox-row"><input type="checkbox" name="exclude_metro" value="1" {{ 'checked' if filters.exclude_metro else '' }}> 광역시 제외</label>
+      <label class="chip-checkbox"><input type="checkbox" name="coastal" value="1" {{ 'checked' if filters.coastal_only else '' }}><span>🌊 바다 있는 곳만</span></label>
+      <label class="chip-checkbox"><input type="checkbox" name="exclude_metro" value="1" {{ 'checked' if filters.exclude_metro else '' }}><span>🏙️ 광역시 제외</span></label>
     </div>
     <hr class="divider">
     <div class="form-row" style="align-items:center; justify-content:space-between;">
@@ -41,6 +47,25 @@
       </div>
     </div>
   </form>
+</div>
+</div>
+
+<div class="feature-grid">
+  <div class="feature-item">
+    <div class="feature-icon">🎯</div>
+    <div class="feature-title">조건 기반 매칭</div>
+    <div class="feature-desc">거리·해안·광역시 조건으로 후보를 좁혀요</div>
+  </div>
+  <div class="feature-item">
+    <div class="feature-icon">🗓️</div>
+    <div class="feature-title">AI 일정 자동 구성</div>
+    <div class="feature-desc">실제 TourAPI 장소로 날짜별 일정을 짜요</div>
+  </div>
+  <div class="feature-item">
+    <div class="feature-icon">🏨</div>
+    <div class="feature-title">동선 맞춤 숙소</div>
+    <div class="feature-desc">일정 사이 가장 가까운 숙소를 찾아줘요</div>
+  </div>
 </div>
 
 {% if confirmed %}
@@ -71,6 +96,7 @@
   <div class="panel empty-state">위에서 조건을 정하고 <strong>카드 뽑기</strong>를 눌러 주세요.</div>
 
 {% else %}
+  <div class="section-heading">🎴 뽑힌 여행지 카드</div>
   <div class="grid">
     {% for card in cards %}
       {% set r = card.region %}

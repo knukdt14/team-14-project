@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 {% block title %}주변 숙소 · TripRoll{% endblock %}
+{% block hero %}
+<div class="hero">
+  <span class="hero-badge">🏨 STEP 3 · 주변 숙소</span>
+  <h1 class="hero-title">{% if slot_url %}<a href="{{ slot_url }}" class="hero-link" title="🎰 랜덤 뽑기로 이동">동선</a>{% else %}동선{% endif %}에서 가까운 순으로<br>숙소를 골라보세요</h1>
+  <p class="hero-sub">일정과 일정 사이, 가장 편한 위치의 숙소를 추천해드립니다.</p>
+</div>
+{% endblock %}
 {% block content %}
-<div class="page-title">주변 숙소</div>
-<div class="page-sub">짜 놓은 동선에서 가까운 순으로 숙소를 골라 보세요.</div>
 
 {% if api_key_missing %}
   <div class="panel">
@@ -99,7 +104,7 @@
 {% if error %}
   <div class="panel"><span style="color:#b3261e; font-weight:700;">{{ error }}</span></div>
 {% elif center %}
-  <h3 style="margin: 18px 0 12px;">📍 {{ center.label }} 주변 {{ radius }}m 검색 결과</h3>
+  <div class="section-heading">📍 {{ center.label }} 주변 {{ radius }}m 검색 결과</div>
 
   {% if all_places_count == 0 %}
     <div class="panel empty-state">검색 반경 내에 숙박시설이 없습니다.</div>
@@ -118,8 +123,8 @@
       </div>
     </div>
 
-    <div class="panel">
-      <div class="form-row" style="align-items:center; justify-content:space-between;">
+    <div class="panel sticky-bar">
+      <div class="form-row" style="align-items:center; justify-content:space-between; margin-bottom:0;">
         <div class="pill-group">
           {% for tf in type_filter_links %}
             <a class="pill {{ 'active' if tf.active else '' }}" href="{{ tf.url }}">{{ tf.label }}</a>
