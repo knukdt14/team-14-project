@@ -171,6 +171,7 @@ def index():
         filter_qs=_filter_qs(filters),
         pool_count=len(pool),
         pool_names=sorted(pool["name"].tolist()),
+        region_sido=dict(zip(regions["name"], regions["sido"])),
         can_draw=len(pool) >= 3,
         cards=cards,
         confirmed=confirmed,
