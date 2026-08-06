@@ -574,8 +574,19 @@ a { color: inherit; text-decoration: none; }
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 20px 16px 14px; box-shadow: var(--shadow);
 }
+.dart-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+}
 .dart-instructions {
-  text-align: center; color: var(--text-muted); font-size: 13.5px; margin: 0 0 10px;
+  flex: 1 1 260px; min-width: 0;
+  text-align: left; color: var(--text-muted); font-size: 13.5px; margin: 0;
+}
+.dart-spin-toggle { flex: 0 0 auto; }
+.dart-spin-toggle span { white-space: nowrap; }
+@media (max-width: 560px) {
+  .dart-toolbar { justify-content: center; }
+  .dart-instructions { text-align: center; flex-basis: 100%; }
 }
 #dart-stage { display: flex; justify-content: center; }
 #dart-stage canvas {
@@ -592,59 +603,6 @@ a { color: inherit; text-decoration: none; }
 .dart-result .place.miss { color: var(--text-muted); }
 .dart-result .note { font-size: 14px; color: var(--text-muted); margin-top: 8px; }
 .dart-result .coord { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
-
-/* -------------------------------------------------------------- route day nav */
-.route-daynav {
-  position: sticky; top: 78px; z-index: 10;
-  background: var(--bg); padding: 10px 0; margin-bottom: 4px;
-}
-.route-daynav .pill { border: none; cursor: pointer; }
-
-.route-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
-@media (max-width: 900px) { .route-layout { grid-template-columns: 1fr; } }
-
-.route-day-panel[hidden] { display: none; }
-.route-day-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  margin-bottom: 4px;
-}
-.route-day-title { font-size: 16px; font-weight: 900; }
-.route-day-count { font-size: 12px; font-weight: 700; color: var(--text-faint); }
-.route-day-panel .route-timeline { margin-top: 16px; }
-
-.route-map-wrap { position: sticky; top: 128px; }
-
-/* -------------------------------------------------------------- route timeline */
-.route-timeline { position: relative; padding-left: 30px; margin: 8px 0 4px; }
-.route-timeline::before {
-  content: ""; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: var(--border);
-}
-.route-stop { position: relative; padding-bottom: 18px; }
-.route-stop:last-child { padding-bottom: 0; }
-.route-stop-marker {
-  position: absolute; left: -30px; top: 2px; width: 20px; height: 20px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; font-size: 11px;
-  background: var(--surface); border: 2px solid var(--accent); z-index: 1;
-}
-.route-stop-lodging .route-stop-marker { border-color: var(--teal); background: var(--teal-light); }
-.route-stop-body {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
-  padding: 12px 14px;
-}
-.route-stop-lodging .route-stop-body { background: var(--teal-light); border-color: #cdf1ec; }
-.route-stop-meta {
-  font-size: 11px; color: var(--text-faint); font-weight: 800;
-  text-transform: uppercase; letter-spacing: .03em;
-}
-.route-stop-name { font-size: 15px; font-weight: 800; margin-top: 2px; }
-.route-stop-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
-.route-stop-map { display: inline-block; margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--accent-dark); }
-.route-stop-map:hover { text-decoration: underline; }
-.day-divider {
-  display: flex; align-items: center; gap: 10px;
-  margin: 22px 0 10px; font-size: 13px; font-weight: 800; color: var(--text-muted);
-}
-.day-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 
 /* ---------------------------------------------------------------- footer nav */
 .next-step-bar {
@@ -663,7 +621,6 @@ a { color: inherit; text-decoration: none; }
   background: var(--bg); border: 1.5px dashed var(--accent); border-radius: 12px;
   padding: 16px 18px; font-family: "Pretendard", monospace;
   font-size: 14.5px; line-height: 1.65; color: var(--text); white-space: pre-wrap;
-  margin-top: 16px; /* 위쪽 ARTICLE 라벨(-11px 띄워둔)이 바로 위 텍스트랑 겹치지 않게 여백 확보 */
 }
 .clause-ticket::before {
   content: "\2708 ARTICLE";
@@ -683,10 +640,6 @@ a { color: inherit; text-decoration: none; }
 .friendly-box {
   background: var(--bg); border-left: 4px solid var(--accent); border-radius: 6px;
   padding: 14px 16px; font-size: 15px; line-height: 1.7; color: var(--text);
-}
-.premium-row-selected {
-  background: var(--accent-light); border-left-color: var(--accent-dark);
-  box-shadow: 0 0 0 1px var(--accent-light);
 }
 .chat-bubble-row-user { display: flex; justify-content: flex-end; margin: 10px 0; }
 .chat-bubble-user {
