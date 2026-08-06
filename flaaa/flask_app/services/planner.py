@@ -20,11 +20,15 @@ from pydantic import ValidationError
 
 from flask_app.services.cache import cache
 from services.planner_rag import RELATIONSHIP_KEYWORDS, build_search_query, rank_candidates
-from services.planner_schemas import TravelPlan, strict_response_format
+from services.planner_schemas import TravelPlan
 from services.tmap_transit import TmapTransitError, fetch_air_travel_info
 from services.tour_api import fetch_place_candidates
 
 logger = logging.getLogger(__name__)
+
+
+class BudgetExceededError(ValueError):
+    pass
 TOUR_SIDO_COMPATIBILITY = {"전라남도": "전라북도"}
 
 
@@ -91,7 +95,7 @@ def retrieve_candidates(region: dict, profile: dict, start: date, end: date) -> 
     def embed(text: str) -> np.ndarray:
         return np.asarray(_embed_cached(text, model, hf_token), dtype=np.float32)
 
-    ranked, mode = rank_candidates(candidates, query, embed, int(os.getenv("RAG_TOP_K", "12")))
+    ranked, mode = rank_candidates(candidates, query, embed, min(8, int(os.getenv("RAG_TOP_K", "12"))))
     logger.warning("[Planner RAG] input=%d ranked=%d mode=%s", len(candidates), len(ranked), mode)
     if not ranked:
         raise ValueError(f"이 지역에서 일정 후보 장소를 찾지 못했습니다. (TourAPI 후보 {len(candidates)}개, RAG 후보 {len(ranked)}개)")
@@ -100,7 +104,13 @@ def retrieve_candidates(region: dict, profile: dict, start: date, end: date) -> 
 
 def build_prompt(profile: dict, candidates: list[dict], dates: list[str]) -> str:
     allowed = [
-        {key: item.get(key) for key in ("content_id", "name", "category", "address", "latitude", "longitude", "overview", "event_start", "event_end")}
+        {
+            **{key: item.get(key) for key in ("content_id", "name", "category", "address", "latitude", "longitude", "event_start", "event_end")},
+            # Full TourAPI descriptions can be several thousand characters
+            # each. A short summary is enough for planning and prevents the
+            # reasoning model from exhausting its output budget.
+            "overview": (item.get("overview") or "")[:240],
+        }
         for item in candidates
     ]
     return f"""당신은 국내 여행 동선 전문가입니다. 반드시 아래 TourAPI 후보만 사용해 JSON 스키마에 맞는 일정을 만드세요.
@@ -120,34 +130,120 @@ def validate_plan(plan: TravelPlan, dates: list[str], allowed_ids: set[str], bud
     if invalid:
         raise ValueError(f"TourAPI 후보에 없는 장소가 포함되었습니다: {', '.join(sorted(invalid))}")
     if plan.total_estimated_cost > budget_per_person:
-        raise ValueError(f"1인 예상 총비용 {plan.total_estimated_cost:,}원이 1인 예산을 초과했습니다.")
+        raise BudgetExceededError(f"1인 예상 총비용 {plan.total_estimated_cost:,}원이 1인 예산을 초과했습니다.")
+
+
+def _repair_json(payload: str) -> str:
+    """Repair common LLM JSON slips without changing field values."""
+    payload = payload.replace("“", '"').replace("”", '"').replace("’", "'")
+    payload = re.sub(r",\s*([}\]])", r"\1", payload)  # trailing commas
+    output, in_string, escaped = [], False, False
+    for index, char in enumerate(payload):
+        if in_string and char in "\r\n":
+            output.append("\\n")
+            continue
+        if char == '"' and not escaped:
+            if not in_string:
+                # A quoted key directly after a completed value is the common
+                # "missing comma" error emitted by chat models.
+                previous = next((value for value in reversed(output) if not value.isspace()), "")
+                end_quote = payload.find('"', index + 1)
+                tail = payload[end_quote + 1:] if end_quote >= 0 else ""
+                if previous in {'"', '}', ']'} or previous.isdigit():
+                    if re.match(r"\s*:", tail):
+                        output.append(",")
+            in_string = not in_string
+        escaped = char == "\\" and not escaped
+        if char != "\\":
+            escaped = False
+        output.append(char)
+    return "".join(output)
 
 
 def parse_llm_plan(content: str) -> TravelPlan:
-    """Decode JSON output defensively when a provider emits an invalid escape."""
+    """Decode and repair common JSON formatting mistakes in LLM output."""
     payload = content.strip()
     fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", payload, flags=re.DOTALL | re.IGNORECASE)
     if fenced:
         payload = fenced.group(1)
+    start, end = payload.find("{"), payload.rfind("}")
+    if start >= 0 and end > start:
+        payload = payload[start:end + 1]
     try:
         data = json.loads(payload)
     except json.JSONDecodeError:
-        repaired = re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", payload)
+        repaired = _repair_json(re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", payload))
         data = json.loads(repaired)
     return TravelPlan.model_validate(data)
+
+
+def normalize_plan_costs(plan: TravelPlan) -> TravelPlan:
+    """Make item, daily, and trip-level per-person estimates agree exactly."""
+    data = plan.model_dump()
+    total = 0
+    for day in data["itinerary"]:
+        daily = sum(item["estimated_cost"] for item in day["items"])
+        day["daily_budget"] = daily
+        total += daily
+    data["total_estimated_cost"] = total
+    return TravelPlan.model_validate(data)
+
+
+def _tourapi_fallback_plan(candidates: list[dict], dates: list[str]) -> dict:
+    """Return a valid, fast TourAPI itinerary when the LLM returns no content."""
+    if not candidates:
+        raise ValueError("일정을 만들 TourAPI 후보가 없습니다.")
+    ordered = sorted(candidates, key=lambda item: (item.get("latitude") is None, item.get("latitude") or 0, item.get("longitude") or 0))
+    itinerary = []
+    for day_index, day in enumerate(dates):
+        items = []
+        for item_index in range(2):
+            candidate = ordered[(day_index * 2 + item_index) % len(ordered)]
+            items.append({
+                "time": "10:00" if item_index == 0 else "13:00",
+                "content_id": candidate["content_id"], "name": candidate["name"], "category": candidate["category"],
+                "address": candidate.get("address", ""), "latitude": candidate.get("latitude"), "longitude": candidate.get("longitude"),
+                "duration_minutes": 120, "travel_minutes_from_previous": 0 if item_index == 0 else 30,
+                "estimated_cost": 0, "memo": "TourAPI 후보를 좌표 순서로 배치한 빠른 일정 초안입니다.",
+            })
+        itinerary.append({"date": day, "daily_budget": 0, "items": items})
+    return {"summary": "TourAPI 기반 빠른 일정 초안입니다. 다시 생성하면 AI 세부 추천을 시도합니다.", "total_estimated_cost": 0, "itinerary": itinerary}
 
 
 def _upstage_completion(messages: list[dict], max_tokens: int, temperature: float) -> str:
     api_key = os.getenv("UPSTAGE_API_KEY", "").strip()
     if not api_key: raise ValueError("UPSTAGE_API_KEY를 .env에 설정해 주세요.")
-    payload = {"model": os.getenv("UPSTAGE_MODEL", "solar-pro4"), "messages": messages, "response_format": {"type": "json_object"}, "max_tokens": max_tokens, "temperature": temperature, "reasoning_effort": os.getenv("UPSTAGE_REASONING_EFFORT", "low")}
+    # P2 needs a structured itinerary quickly.  Keep this separate from P4's
+    # chat model: solar-pro3 returns the same JSON shape without pro4's long
+    # hidden-reasoning delay. Override with PLANNER_UPSTAGE_MODEL if needed.
+    payload = {"model": os.getenv("PLANNER_UPSTAGE_MODEL", "solar-pro3"), "messages": messages, "max_tokens": max_tokens, "temperature": temperature}
     try:
         response = requests.post(os.getenv("UPSTAGE_BASE_URL", "https://api.upstage.ai/v1").rstrip("/") + "/chat/completions", json=payload, headers={"Authorization": f"Bearer {api_key}"}, timeout=120)
         response.raise_for_status(); choice = response.json()["choices"][0]; content = choice["message"].get("content")
     except (requests.RequestException, KeyError, IndexError, TypeError, ValueError) as error:
         raise ValueError(f"Upstage Solar API 호출에 실패했습니다: {response.text[:300] if 'response' in locals() else error}") from error
     if not isinstance(content, str) or not content.strip():
-        logger.warning("[Planner Upstage] empty content model=%s finish_reason=%s", payload["model"], choice.get("finish_reason")); raise ValueError("Upstage Solar API가 빈 응답을 반환했습니다.")
+        # JSON mode can occasionally finish without a visible content field.
+        # Retry once as a normal completion; the system prompt still requires
+        # a JSON object, while Pydantic validation protects the result.
+        logger.warning("[Planner Upstage] empty JSON-mode content model=%s finish_reason=%s", payload["model"], choice.get("finish_reason"))
+        fallback_payload = {**payload, "messages": [*messages, {"role": "system", "content": "Return a complete JSON object now. Do not return an empty response."}]}
+        try:
+            fallback_response = requests.post(
+                os.getenv("UPSTAGE_BASE_URL", "https://api.upstage.ai/v1").rstrip("/") + "/chat/completions",
+                json=fallback_payload,
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=120,
+            )
+            fallback_response.raise_for_status()
+            fallback_choice = fallback_response.json()["choices"][0]
+            fallback_content = fallback_choice["message"].get("content")
+        except (requests.RequestException, KeyError, IndexError, TypeError, ValueError) as error:
+            raise ValueError("Upstage Solar API가 JSON 모드 대체 요청에도 실패했습니다.") from error
+        if isinstance(fallback_content, str) and fallback_content.strip():
+            return fallback_content
+        logger.warning("[Planner Upstage] empty fallback content model=%s finish_reason=%s", payload["model"], fallback_choice.get("finish_reason"))
+        raise ValueError("Upstage Solar API가 빈 응답을 반환했습니다.")
     return content
 
 
@@ -159,9 +255,12 @@ def generate_plan(region: dict, profile: dict, start: date, end: date) -> dict:
     """
     candidates, query, mode = retrieve_candidates(region, profile, start, end)
     dates = [d.isoformat() for d in days_between(start, end)]
-    output_schema = strict_response_format([item["content_id"] for item in candidates], dates)["json_schema"]["schema"]
+    max_items_per_day = max(2, min(5, int(profile["budget_per_person"]) // max(len(dates), 1) // 30_000))
+    min_items_per_day = 3 if max_items_per_day >= 3 else 2
     messages = [
-        {"role": "system", "content": f"TourAPI 근거만 사용하세요. 설명 없이 json 객체 하나만 출력하세요. 아래 JSON Schema 필드와 구조만 사용하세요.\n{json.dumps(output_schema, ensure_ascii=False)}"},
+        {"role": "system", "content": "Use candidate latitude/longitude to make each day a geographically efficient route. Keep the item array in real visit order, group nearby places, avoid backtracking, and give realistic chronological times and travel_minutes_from_previous. Prioritize the traveller's styles, companion preferences, and free-text request. If restaurant candidates exist, include a meal stop at 11:30-13:30 or 17:30-20:30."},
+        {"role": "system", "content": "Return JSON only. Required root fields: summary, total_estimated_cost, itinerary. Every itinerary entry has date, daily_budget, items. Every item has time, content_id, name, category, address, latitude, longitude, duration_minutes, travel_minutes_from_previous, estimated_cost, memo. Use only supplied content_id values and include every requested date once."},
+        {"role": "system", "content": f"Budget is a hard per-person limit of {profile['budget_per_person']} KRW. Do not use all candidates: choose only the best affordable places. Schedule {min_items_per_day} to {max_items_per_day} items per day (target 3-5 when the budget allows), and make total_estimated_cost no greater than the budget."},
         {"role": "user", "content": build_prompt(profile, candidates, dates)},
     ]
     allowed_ids = {item["content_id"] for item in candidates}
@@ -169,16 +268,19 @@ def generate_plan(region: dict, profile: dict, start: date, end: date) -> dict:
     last_error: Exception | None = None
     for attempt in range(2):
         try:
-            text = _upstage_completion(messages, min(12_000, max(8_000, len(dates) * 1_500)), 0.3 if attempt == 0 else 0.1)
+            text = _upstage_completion(messages, min(8_000, max(4_000, len(dates) * 1_200)), 0.3 if attempt == 0 else 0.1)
         except ValueError as error:
             last_error = error
             if attempt == 0:
                 messages.append({"role": "user", "content": "JSON 본문이 비어 있었습니다. JSON만 다시 출력하세요."}); continue
             raise
         try:
-            plan = parse_llm_plan(text)
+            plan = normalize_plan_costs(parse_llm_plan(text))
             validate_plan(plan, dates, allowed_ids, int(profile["budget_per_person"]))
             return {"plan": plan.model_dump(mode="json"), "candidates": candidates, "query": query, "mode": mode}
+        except BudgetExceededError as error:
+            last_error = error
+            messages.append({"role": "user", "content": f"The prior plan exceeded the {profile['budget_per_person']} KRW per-person limit. Make a new, smaller itinerary with fewer affordable places. Return JSON only."})
         except (ValidationError, ValueError) as error:
             last_error = error
             messages += [
