@@ -27,6 +27,9 @@
       <li class="tab {{ 'done' if trip_context.get('insurance') else '' }} {{ 'active' if active_step == 'insurance' else '' }}">
         <a href="{{ url_for('insurance.index') }}"><span class="tab-icon">🛡️</span><span class="tab-label">보험</span></a>
       </li>
+      <li class="tab {{ 'active' if active_step == 'summary' else '' }}">
+        <a href="{{ url_for('summary.index') }}"><span class="tab-icon">🗺️</span><span class="tab-label">요약·동선</span></a>
+      </li>
     </ol>
   </nav>
 </header>
@@ -51,6 +54,7 @@
       <li><a href="{{ url_for('planner.index') }}">여행 플래너</a></li>
       <li><a href="{{ url_for('lodging.index') }}">주변 숙소</a></li>
       <li><a href="{{ url_for('insurance.index') }}">여행자 보험</a></li>
+      <li><a href="{{ url_for('summary.index') }}">요약·동선</a></li>
     </ol>
     <p class="site-footer-note">팀 프로젝트로 제작된 서비스입니다. 실제 예약·결제 기능은 제공하지 않습니다.</p>
   </div>
