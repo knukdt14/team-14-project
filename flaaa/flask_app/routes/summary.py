@@ -47,6 +47,29 @@ def _build_day_groups(plan: dict | None, lodging_map: dict, days: list[date]) ->
     return groups
 
 
+def _day_route_points(day_groups: list[dict]) -> dict:
+    """Day별 지도 마커 좌표. summary.html이 Day 탭 전환할 때 해당 Day 것만 그린다."""
+    points_by_day: dict[int, list[dict]] = {}
+    for group in day_groups:
+        points = []
+        for stop in group["stops"]:
+            lat, lng = stop.get("latitude"), stop.get("longitude")
+            if lat is None or lng is None:
+                continue
+            points.append(
+                {
+                    "name": stop.get("name"),
+                    "latitude": lat,
+                    "longitude": lng,
+                    "time": stop.get("time") if stop["kind"] == "schedule" else "숙박",
+                    "date": group["date"].isoformat(),
+                    "kind": stop["kind"],
+                }
+            )
+        points_by_day[group["index"]] = points
+    return points_by_day
+
+
 @summary_bp.route("/")
 @region_required
 def index():
@@ -77,6 +100,7 @@ def index():
         profile=profile,
         days=days,
         day_groups=day_groups,
+        day_route_points=_day_route_points(day_groups),
         extra_lodging=extra_lodging,
         insurance_info=insurance_info,
         premium_selection=premium_selection,

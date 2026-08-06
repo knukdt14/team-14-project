@@ -296,6 +296,7 @@ def select():
 
     lodgings[night_key] = {
         "night_label": night_label,
+        "id": request.form.get("id") or None,
         "name": place_name,
         "type": request.form.get("lodging_type"),
         "address": request.form.get("address"),
