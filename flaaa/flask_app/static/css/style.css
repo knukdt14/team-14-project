@@ -3,25 +3,25 @@
    비슷한 레이아웃 패턴(카드 그리드, 상단 스테퍼, 필터 칩)만 재현한다. */
 
 :root {
-  --accent: #ff6b57;
-  --accent-2: #ff9a5a;
-  --accent-dark: #e8543f;
-  --accent-light: #fff1ee;
+  --accent: #2f6fed;
+  --accent-2: #5b93ff;
+  --accent-dark: #1e4fc4;
+  --accent-light: #eaf1ff;
   --teal: #17b8a6;
   --teal-light: #e6faf7;
-  --bg: #f6f7fb;
+  --bg: #f5f7fa;
   --surface: #ffffff;
-  --border: #ecedf2;
-  --text: #1f2430;
-  --text-muted: #7d8494;
-  --text-faint: #b6bcc8;
-  --radius-lg: 20px;
-  --radius-md: 14px;
-  --radius-sm: 10px;
-  --shadow: 0 2px 10px rgba(31, 36, 48, 0.05);
-  --shadow-md: 0 8px 22px rgba(31, 36, 48, 0.08);
-  --shadow-hover: 0 16px 34px -6px rgba(255, 107, 87, 0.28);
-  --shadow-nav: 0 1px 0 rgba(31, 36, 48, 0.06);
+  --border: #e6e9f0;
+  --text: #1c2333;
+  --text-muted: #6b7386;
+  --text-faint: #a7aebd;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 9px;
+  --shadow: 0 2px 10px rgba(20, 29, 51, 0.05);
+  --shadow-md: 0 8px 22px rgba(20, 29, 51, 0.08);
+  --shadow-hover: 0 16px 34px -6px rgba(47, 111, 237, 0.24);
+  --shadow-nav: 0 1px 0 rgba(20, 29, 51, 0.06);
   --gradient-brand: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
 }
 
@@ -124,7 +124,7 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: 28px;
   text-align: center;
   color: #fff;
-  box-shadow: 0 20px 40px -14px rgba(255, 107, 87, 0.4);
+  box-shadow: 0 20px 40px -14px rgba(47, 111, 237, 0.35);
 }
 .hero::before {
   content: ""; position: absolute; border-radius: 50%;
@@ -298,7 +298,7 @@ a { color: inherit; text-decoration: none; }
 .chip-checkbox:hover span { border-color: var(--accent); color: var(--accent-dark); }
 .chip-checkbox:has(input:checked) span {
   background: var(--gradient-brand); border-color: transparent; color: #fff;
-  box-shadow: 0 4px 12px -2px rgba(255, 107, 87, 0.4);
+  box-shadow: 0 4px 12px -2px rgba(47, 111, 237, 0.35);
 }
 .chip-checkbox input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -311,7 +311,7 @@ a { color: inherit; text-decoration: none; }
 }
 .btn:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); border-color: var(--text-faint); }
 .btn:active { transform: translateY(0); }
-.btn-primary { background: var(--gradient-brand); border-color: transparent; color: #fff; box-shadow: 0 6px 16px -4px rgba(255, 107, 87, 0.45); }
+.btn-primary { background: var(--gradient-brand); border-color: transparent; color: #fff; box-shadow: 0 6px 16px -4px rgba(47, 111, 237, 0.4); }
 .btn-primary:hover { box-shadow: var(--shadow-hover); }
 .btn-primary:disabled { background: var(--text-faint); border-color: var(--text-faint); cursor: not-allowed; transform: none; box-shadow: none; }
 .btn-outline { background: transparent; }
@@ -329,7 +329,7 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer; transition: all .15s ease;
 }
 .pill:hover { border-color: var(--accent); color: var(--accent-dark); }
-.pill.active { background: var(--gradient-brand); border-color: transparent; color: #fff; box-shadow: 0 4px 12px -2px rgba(255, 107, 87, 0.4); }
+.pill.active { background: var(--gradient-brand); border-color: transparent; color: #fff; box-shadow: 0 4px 12px -2px rgba(47, 111, 237, 0.35); }
 .badge {
   display: inline-block; border-radius: 999px; padding: 3px 11px;
   font-size: 12px; font-weight: 700; color: #fff;
@@ -449,7 +449,7 @@ a { color: inherit; text-decoration: none; }
   border: none; border-radius: var(--radius-lg);
   padding: 36px 32px; background: var(--gradient-brand); text-align: center;
   color: #fff;
-  box-shadow: 0 20px 40px -14px rgba(255, 107, 87, 0.4);
+  box-shadow: 0 20px 40px -14px rgba(47, 111, 237, 0.35);
 }
 .confirmed-panel::before {
   content: ""; position: absolute; width: 200px; height: 200px; border-radius: 50%;
@@ -458,6 +458,30 @@ a { color: inherit; text-decoration: none; }
 .confirmed-panel .label { position: relative; z-index: 1; font-size: 12px; letter-spacing: .2em; color: rgba(255,255,255,.85); font-weight: 800; }
 .confirmed-panel .place { position: relative; z-index: 1; font-size: 42px; font-weight: 900; margin: 10px 0; }
 .confirmed-panel .note { position: relative; z-index: 1; font-size: 14px; color: rgba(255,255,255,.92); line-height: 1.7; }
+
+/* -------------------------------------------------------------- dart throw */
+.dart-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 20px 16px 14px; box-shadow: var(--shadow);
+}
+.dart-instructions {
+  text-align: center; color: var(--text-muted); font-size: 13.5px; margin: 0 0 10px;
+}
+#dart-stage { display: flex; justify-content: center; }
+#dart-stage canvas {
+  display: block; cursor: grab; touch-action: none; border-radius: 12px; max-width: 100%; height: auto;
+  border: 1px solid var(--border);
+}
+#dart-stage canvas.pulling { cursor: grabbing; }
+#dart-tip {
+  margin-top: 6px; font-size: 12.5px; color: var(--text-faint);
+  text-align: center; transition: opacity .25s ease;
+}
+.dart-result { text-align: center; padding: 8px 0 2px; }
+.dart-result .place { font-size: 38px; font-weight: 900; color: var(--text); letter-spacing: -0.03em; }
+.dart-result .place.miss { color: var(--text-muted); }
+.dart-result .note { font-size: 14px; color: var(--text-muted); margin-top: 8px; }
+.dart-result .coord { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
 
 /* ---------------------------------------------------------------- footer nav */
 .next-step-bar {

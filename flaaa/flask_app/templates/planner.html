@@ -80,30 +80,6 @@
   <button type="submit" class="btn btn-primary btn-block" style="margin-bottom:20px;">TourAPI 검색 후 AI 일정 생성</button>
 </form>
 
-{% if candidates %}
-<details class="panel">
-  <summary style="cursor:pointer; font-weight:800;">TourAPI 검색 근거 · {{ '임베딩 검색' if mode == 'embedding' else '키워드 보조 검색' }}</summary>
-  <p style="color:var(--text-muted); font-size:13px;">검색어: {{ query }}</p>
-  <div style="overflow-x:auto;">
-    <table style="width:100%; border-collapse:collapse; font-size:13px;">
-      <thead><tr style="text-align:left; border-bottom:1px solid var(--border);">
-        <th style="padding:6px;">이름</th><th style="padding:6px;">유형</th><th style="padding:6px;">주소</th><th style="padding:6px;">유사도</th>
-      </tr></thead>
-      <tbody>
-        {% for c in candidates %}
-          <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:6px;">{{ c.name }}</td>
-            <td style="padding:6px;">{{ c.category }}</td>
-            <td style="padding:6px;">{{ c.address }}</td>
-            <td style="padding:6px;">{{ c.retrieval_score }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</details>
-{% endif %}
-
 {% if plan %}
 <div class="panel">
   <p style="font-weight:800; color:var(--accent-dark);">{{ plan.summary }}</p>

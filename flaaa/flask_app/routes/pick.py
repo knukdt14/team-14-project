@@ -8,10 +8,12 @@ Streamlit 버전(views/page1_pick.py)과 달리 필터(출발지/거리/조건)�
 없어서, 뽑았을 때의 조건과 리롤/확정 시점의 조건이 항상 일치한다.
 """
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, redirect, render_template, request, send_file, session, url_for
 
 from flask_app.state import set_trip_context_value
 from services import geo
+from views._dartcomp import MAP_JSON
+from views._dartmap import from_canvas
 
 pick_bp = Blueprint("pick", __name__)
 
@@ -91,8 +93,13 @@ def index():
     origin_row, pool = _pool(filters)
     regions = _regions()
 
+    mode = request.args.get("mode") or "card"
+    if mode not in ("card", "dart"):
+        mode = "card"
+
     cards = session.get("cards", [])
     confirmed = session.get("confirmed")
+    dart = session.get("dart")
 
     return render_template(
         "pick.html",
@@ -102,11 +109,23 @@ def index():
         filters=filters,
         filter_qs=_filter_qs(filters),
         pool_count=len(pool),
+        pool_names=sorted(pool["name"].tolist()),
         can_draw=len(pool) >= 3,
         cards=cards,
         confirmed=confirmed,
         grade_colors=GRADE_COLORS,
+        mode=mode,
+        dart=dart,
+        map_data_url=url_for("pick.map_data"),
+        dart_throw_url=url_for("pick.dart_throw"),
+        dart_retry_url=url_for("pick.dart_retry"),
+        dart_confirm_url=url_for("pick.dart_confirm"),
     )
+
+
+@pick_bp.route("/map-data.json")
+def map_data():
+    return send_file(MAP_JSON, mimetype="application/json")
 
 
 @pick_bp.route("/draw", methods=["POST"])
@@ -160,6 +179,33 @@ def reroll(idx: int):
     return redirect(url_for("pick.index") + _filter_qs(filters))
 
 
+def _confirm_pick(pick: dict, origin_row) -> None:
+    session["confirmed"] = pick
+    session.modified = True
+    r = pick["region"]
+    lat, lng = pick["point"]
+    set_trip_context_value(
+        "region",
+        {
+            "sido": r["sido"],
+            "sigungu": r["sigungu"],
+            "name": r["name"],
+            "latitude": lat,
+            "longitude": lng,
+            "distance_km": int(r["distance_km"]),
+            "locked": True,
+        },
+    )
+    set_trip_context_value(
+        "origin",
+        {
+            "name": origin_row["name"],
+            "latitude": float(origin_row["lat"]),
+            "longitude": float(origin_row["lng"]),
+        },
+    )
+
+
 @pick_bp.route("/confirm/<int:idx>", methods=["POST"])
 def confirm(idx: int):
     filters = _filters(request.form)
@@ -167,31 +213,55 @@ def confirm(idx: int):
     cards = session.get("cards", [])
 
     if 0 <= idx < len(cards):
-        card = cards[idx]
-        session["confirmed"] = card
-        session.modified = True
-        r = card["region"]
-        lat, lng = card["point"]
-        set_trip_context_value(
-            "region",
-            {
-                "sido": r["sido"],
-                "sigungu": r["sigungu"],
-                "name": r["name"],
-                "latitude": lat,
-                "longitude": lng,
-                "distance_km": int(r["distance_km"]),
-                "locked": True,
-            },
-        )
-        set_trip_context_value(
-            "origin",
-            {
-                "name": origin_row["name"],
-                "latitude": float(origin_row["lat"]),
-                "longitude": float(origin_row["lng"]),
-            },
-        )
+        _confirm_pick(cards[idx], origin_row)
+
+    return redirect(url_for("pick.index") + _filter_qs(filters))
+
+
+@pick_bp.route("/dart/throw", methods=["POST"])
+def dart_throw():
+    filters = _filters(request.form)
+    _, pool = _pool(filters)
+
+    try:
+        x = float(request.form["x"])
+        y = float(request.form["y"])
+    except (KeyError, ValueError):
+        return redirect(url_for("pick.index") + _filter_qs(filters) + "&mode=dart")
+
+    name = request.form.get("name") or None
+    lat, lng = from_canvas(x, y)
+
+    region = None
+    matched = pool[pool["name"] == name] if name else pool.iloc[0:0]
+    if len(matched):
+        region = matched.iloc[0].to_dict()
+
+    session["dart"] = {
+        "point": [lat, lng],
+        "region": region,
+        "grade": geo.grade_of(region["distance_km"]) if region else None,
+        "land": name if region is None else None,
+    }
+    session.modified = True
+    return redirect(url_for("pick.index") + _filter_qs(filters) + "&mode=dart")
+
+
+@pick_bp.route("/dart/retry", methods=["POST"])
+def dart_retry():
+    filters = _filters(request.form)
+    session.pop("dart", None)
+    return redirect(url_for("pick.index") + _filter_qs(filters) + "&mode=dart")
+
+
+@pick_bp.route("/dart/confirm", methods=["POST"])
+def dart_confirm():
+    filters = _filters(request.form)
+    origin_row, _ = _pool(filters)
+    dart = session.get("dart")
+
+    if dart and dart.get("region"):
+        _confirm_pick(dart, origin_row)
 
     return redirect(url_for("pick.index") + _filter_qs(filters))
 
@@ -199,6 +269,7 @@ def confirm(idx: int):
 @pick_bp.route("/restart", methods=["POST"])
 def restart():
     session.pop("cards", None)
+    session.pop("dart", None)
     session.pop("confirmed", None)
     session.pop("trip_context", None)
     session.pop("favorites", None)
