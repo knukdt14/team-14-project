@@ -96,7 +96,12 @@ def _sync_context(region: dict) -> None:
 
 
 def _route_points(items: list[dict]) -> list[dict]:
-    return [{key: item[key] for key in ("name", "latitude", "longitude", "date", "time")} | {"kind": "schedule"} for item in sorted(items, key=lambda value: (value["date"], value["time"])) if item.get("latitude") is not None and item.get("longitude") is not None]
+    points, sequences = [], {}
+    for item in sorted(items, key=lambda value: (value["date"], value["time"])):
+        if item.get("latitude") is None or item.get("longitude") is None: continue
+        sequences[item["date"]] = sequences.get(item["date"], 0) + 1
+        points.append({**{key: item[key] for key in ("name", "latitude", "longitude", "date", "time")}, "kind": "schedule", "sequence": sequences[item["date"]]})
+    return points
 
 
 def _profile_from_form(form) -> tuple[dict | None, str | None]:

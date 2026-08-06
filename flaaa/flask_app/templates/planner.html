@@ -74,7 +74,7 @@
 </div>
 
 <div class="panel" style="background:var(--accent-light); border:none;">
-  {{ profile.departure }} 출발 · {{ days|length - 1 }}박 {{ days|length }}일 · {{ profile.count }}명 {{ profile.relationship }} 여행
+  <span id="planner-trip-summary">{{ profile.departure }} 출발 · {{ days|length - 1 }}박 {{ days|length }}일 · {{ profile.count }}명 {{ profile.relationship }} 여행</span>
 </div>
 
 {% if plan %}
@@ -132,7 +132,7 @@
 </details>
 
 {% if itinerary %}
-<div class="panel"><div class="section-heading">일정 동선</div><div id="planner-map" style="height:420px;border-radius:14px;overflow:hidden;"></div><p style="color:var(--text-muted);font-size:12px;margin:12px 0 0;">등록된 일정 장소만 순서대로 연결해 표시합니다.</p></div>
+<div class="panel"><div class="section-heading">일정 동선</div><div class="planner-route-filters"><button type="button" class="pill active" data-route-filter="all">전체 일정</button>{% for d in days %}<button type="button" class="pill" data-route-filter="{{ d.isoformat() }}">Day {{ loop.index }} · {{ d.strftime('%m/%d') }}</button>{% endfor %}</div><div id="planner-map" style="height:420px;border-radius:14px;overflow:hidden;"></div><p style="color:var(--text-muted);font-size:12px;margin:12px 0 0;">원 안의 숫자는 해당 날짜의 방문 순서입니다.</p></div>
 <div class="section-heading">🧭 내 일정</div>
 {% for d in days %}
   {% set day_items = itinerary_by_day[d.isoformat()] %}
@@ -167,11 +167,32 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+(() => {
+  const summary = document.getElementById('planner-trip-summary');
+  const departure = document.getElementById('departure');
+  const start = document.getElementById('start');
+  const end = document.getElementById('end');
+  const count = document.getElementById('count');
+  const relationship = document.getElementById('relationship');
+  if (!summary || !departure || !start || !end || !count || !relationship) return;
+  const updateSummary = () => {
+    const startDate = start.value ? new Date(`${start.value}T00:00:00`) : null;
+    const endDate = end.value ? new Date(`${end.value}T00:00:00`) : null;
+    const days = startDate && endDate && endDate >= startDate ? Math.round((endDate - startDate) / 86400000) + 1 : null;
+    const duration = days ? `${days - 1}박 ${days}일` : '날짜 선택 필요';
+    summary.textContent = `${departure.value.trim() || '출발지 미입력'} 출발 · ${duration} · ${count.value || 0}명 ${relationship.value} 여행`;
+  };
+  [departure, start, end, count, relationship].forEach(input => input.addEventListener('input', updateSummary));
+  relationship.addEventListener('change', updateSummary);
+})();
+</script>
 {% if itinerary %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const routePoints={{ route_points|tojson }},mapEl=document.getElementById('planner-map');
-if(mapEl&&routePoints.length&&window.L){const map=L.map(mapEl,{scrollWheelZoom:false});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);const coords=routePoints.map(p=>[p.latitude,p.longitude]);L.polyline(coords,{color:'#4f8bf9',weight:4}).addTo(map);routePoints.forEach(p=>L.circleMarker([p.latitude,p.longitude],{radius:7,color:'#fff',weight:2,fillColor:'#3478f6',fillOpacity:1}).addTo(map).bindPopup(`<strong>${p.time} · ${p.name}</strong><br>${p.date}`));map.fitBounds(L.latLngBounds(coords),{padding:[30,30],maxZoom:13});}
+const routePoints={{ route_points|tojson }},mapEl=document.getElementById('planner-map');let map,layers=[];
+function drawRoute(filter){if(!map)map=L.map(mapEl,{scrollWheelZoom:false});if(!map.tiles)L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map),map.tiles=true;layers.forEach(l=>map.removeLayer(l));const groups=filter==='all'?Object.values(routePoints.reduce((a,p)=>((a[p.date]??=[]).push(p),a),{})):[routePoints.filter(p=>p.date===filter)],points=groups.flat();groups.forEach(g=>{if(g.length>1)layers.push(L.polyline(g.map(p=>[p.latitude,p.longitude]),{color:'#4f8bf9',weight:4}).addTo(map));});points.forEach(p=>layers.push(L.marker([p.latitude,p.longitude],{icon:L.divIcon({className:'planner-route-marker',html:`<span>${p.sequence}</span>`,iconSize:[30,30],iconAnchor:[15,15]})}).addTo(map).bindPopup(`<strong>${p.sequence}. ${p.time} · ${p.name}</strong><br>${p.date}`)));if(points.length)map.fitBounds(L.latLngBounds(points.map(p=>[p.latitude,p.longitude])),{padding:[30,30],maxZoom:13});}
+if(mapEl&&routePoints.length&&window.L){document.querySelectorAll('[data-route-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-route-filter]').forEach(x=>x.classList.remove('active'));b.classList.add('active');drawRoute(b.dataset.routeFilter)});drawRoute('all');}
 else if(mapEl)mapEl.innerHTML='<p style="padding:20px">좌표가 있는 일정 장소가 추가되면 동선 지도가 표시됩니다.</p>';
 </script>
 {% endif %}

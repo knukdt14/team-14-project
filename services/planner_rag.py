@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 import numpy as np
@@ -40,12 +41,13 @@ def rank_candidates(candidates: list[dict], query: str, embed: Callable[[str], n
         query_norm = np.linalg.norm(query_embedding)
         if not query_norm:
             raise ValueError("empty query embedding")
-        scored = []
-        for item in candidates:
+        def score_item(item: dict) -> dict:
             vector = np.asarray(embed(_candidate_text(item)), dtype=np.float32).reshape(-1)
             denominator = query_norm * np.linalg.norm(vector)
             score = float(np.dot(query_embedding, vector) / denominator) if denominator else 0.0
-            scored.append({**item, "retrieval_score": round(score, 4)})
+            return {**item, "retrieval_score": round(score, 4)}
+        with ThreadPoolExecutor(max_workers=min(8, len(candidates))) as executor:
+            scored = list(executor.map(score_item, candidates))
         return sorted(scored, key=lambda item: item["retrieval_score"], reverse=True)[:top_k], "embedding"
     except Exception:
         query_words = {word.lower() for word in query.split() if word}
