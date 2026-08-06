@@ -77,10 +77,6 @@
   {{ profile.departure }} 출발 · {{ days|length - 1 }}박 {{ days|length }}일 · {{ profile.count }}명 {{ profile.relationship }} 여행
 </div>
 
-<form method="post" action="{{ url_for('planner.generate') }}" data-once>
-  <button type="submit" class="btn btn-primary btn-block" style="margin-bottom:20px;">TourAPI 검색 후 AI 일정 생성</button>
-</form>
-
 {% if plan %}
 <div class="panel">
   <p style="font-weight:800; color:var(--accent-dark);">{{ plan.summary }}</p>

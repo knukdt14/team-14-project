@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}여행 요약 · TripRoll{% endblock %}
+{% block hero %}
+<div class="hero">
+  <span class="hero-badge">🗺️ 최종 요약 · 전체 동선</span>
+  <h1 class="hero-title">{{ region.name }} 여행,<br>한눈에 정리해드려요</h1>
+  <p class="hero-sub">여행지·일정·숙소·보험까지 지금까지 정한 내용을 모아 이동 순서대로 보여드립니다.</p>
+</div>
+{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <div class="stat-row">
+    <div class="stat"><div class="stat-value">{{ region.name }}</div><div class="stat-label">여행지</div></div>
+    <div class="stat"><div class="stat-value">{{ (days|length - 1) if days else '-' }}박 {{ days|length or '-' }}일</div><div class="stat-label">기간</div></div>
+    <div class="stat"><div class="stat-value">{{ profile.get('count', '-') }}명</div><div class="stat-label">인원</div></div>
+    <div class="stat"><div class="stat-value">{{ nights_booked }}/{{ nights_total }}</div><div class="stat-label">숙소 확정 밤</div></div>
+  </div>
+  {% if plan %}
+  <div class="stat-row" style="margin-top:10px;">
+    <div class="stat"><div class="stat-value">{{ plan.start_date }} ~ {{ plan.end_date }}</div><div class="stat-label">날짜</div></div>
+    <div class="stat"><div class="stat-value">{{ profile.get('transport', plan.transportation or '-') }}</div><div class="stat-label">이동수단</div></div>
+    <div class="stat"><div class="stat-value">{{ '{:,}'.format(total_cost) }}원</div><div class="stat-label">일정 예상 비용</div></div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="section-heading">🛡️ 보험 현황</div>
+{% if insurance_info %}
+  {% if insurance_info.mode == 'insured' %}
+    <div class="friendly-box">✅ <strong>{{ insurance_info.insurer }}</strong> 여행자보험에 이미 가입하셨어요.</div>
+  {% else %}
+    <div class="friendly-box">🧭 아직 미가입 — '<strong>{{ intent_labels.get(insurance_info.intent, insurance_info.intent) }}</strong>' 관련해서 4개사를 비교해보셨어요.</div>
+  {% endif %}
+{% else %}
+  <div class="panel empty-state">아직 보험 단계를 진행하지 않았어요.</div>
+{% endif %}
+
+{% if premium_selection %}
+  <div class="friendly-box premium-row-selected" style="margin-top:10px;">
+    💰 선택한 예상 보험료: <strong>{{ premium_selection.company }}</strong> ({{ premium_selection.plan }}){% if premium_selection.is_estimated %} · 일부 추정치 포함{% endif %}<br>
+    2일 기준요금 {{ '{:,}'.format(premium_selection.base) }}원 × {{ premium_selection.days_factor }} × ({{ premium_selection.breakdown }})
+    = <strong>약 {{ '{:,}'.format(premium_selection.total) }}원</strong>
+  </div>
+{% endif %}
+
+<div class="section-heading">🧭 전체 이동 동선</div>
+{% if not plan %}
+  <div class="panel empty-state">아직 일정이 없어요. 플래너에서 일정을 먼저 만들어주세요.</div>
+{% elif not day_groups %}
+  <div class="panel empty-state">등록된 일정이 없어요. 플래너에서 일정을 추가해보세요.</div>
+{% else %}
+  <div class="pill-group route-daynav">
+    {% for group in day_groups %}
+      <a class="pill" href="#day-{{ group.index }}">Day {{ group.index + 1 }} · {{ group.date.strftime('%m/%d') }}</a>
+    {% endfor %}
+  </div>
+
+  {% for group in day_groups %}
+    <details class="panel route-day" id="day-{{ group.index }}" open>
+      <summary class="route-day-summary">
+        <span class="route-day-title">Day {{ group.index + 1 }} · {{ group.date.strftime('%m/%d') }}</span>
+        <span class="route-day-count">{{ group.stops|length }}개 스톱</span>
+      </summary>
+      {% if not group.stops %}
+        <p style="color:var(--text-muted); font-size:13px; margin:10px 0 0;">등록된 일정이 없습니다.</p>
+      {% else %}
+        <div class="route-timeline">
+          {% for stop in group.stops %}
+            <div class="route-stop route-stop-{{ stop.kind }}">
+              <div class="route-stop-marker">{{ '🌙' if stop.kind == 'lodging' else '📍' }}</div>
+              <div class="route-stop-body">
+                <div class="route-stop-meta">
+                  {% if stop.kind == 'lodging' %}{{ group.date.strftime('%m/%d') }} 밤 숙박{% else %}{{ stop.time }}{% endif %}
+                </div>
+                <div class="route-stop-name">
+                  {{ stop.name }}{% if stop.kind == 'lodging' %} 에서 숙박{% endif %}
+                </div>
+                <div class="route-stop-sub">
+                  {% if stop.kind == 'lodging' %}
+                    {{ stop.type }}{% if stop.address %} · {{ stop.address }}{% endif %}
+                  {% else %}
+                    {{ stop.category }}{% if stop.address %} · {{ stop.address }}{% endif %}{% if stop.memo %} · {{ stop.memo }}{% endif %}
+                  {% endif %}
+                </div>
+                {% if stop.latitude and stop.longitude %}
+                  <a class="route-stop-map" href="https://map.kakao.com/link/map/{{ stop.name }},{{ stop.latitude }},{{ stop.longitude }}" target="_blank" rel="noopener">🗺️ 지도에서 보기</a>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </details>
+  {% endfor %}
+{% endif %}
+
+{% if extra_lodging %}
+  <div class="section-heading">🏨 그 외 저장된 숙소</div>
+  <div class="grid">
+    {% for lodge in extra_lodging %}
+      <div class="card">
+        <div class="card-body">
+          <div class="card-name-row"><span class="card-name">{{ lodge.name }}</span></div>
+          <div class="card-addr">{{ lodge.address }}</div>
+          <div class="card-meta-row"><span>{{ lodge.type }}</span><span>{{ lodge.night_label }}</span></div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="next-step-bar" style="margin-top:24px;">
+  <span style="color:var(--text-muted); font-size:14px;">내용을 더 다듬고 싶으신가요? 각 단계로 돌아가서 수정할 수 있어요.</span>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn btn-outline btn-sm" href="{{ url_for('planner.index') }}">일정 수정</a>
+    <a class="btn btn-outline btn-sm" href="{{ url_for('lodging.index') }}">숙소 수정</a>
+    <a class="btn btn-outline btn-sm" href="{{ url_for('insurance.index') }}">보험 수정</a>
+  </div>
+</div>
+{% endblock %}

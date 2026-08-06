@@ -38,11 +38,13 @@ def create_app() -> Flask:
     from flask_app.routes.lodging import lodging_bp
     from flask_app.routes.pick import pick_bp
     from flask_app.routes.planner import planner_bp
+    from flask_app.routes.summary import summary_bp
 
     app.register_blueprint(pick_bp)
     app.register_blueprint(planner_bp)
     app.register_blueprint(lodging_bp)
     app.register_blueprint(insurance_bp)
+    app.register_blueprint(summary_bp)
 
     @app.context_processor
     def inject_globals():

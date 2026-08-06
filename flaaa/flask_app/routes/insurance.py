@@ -85,6 +85,7 @@ def index():
         selected_age_counts=premium_age_counts or {},
         selected_plan=session.get("premium_plan"),
         premium_rows=premium_rows,
+        selected_company=session.get("premium_selected_company"),
     )
 
 
@@ -111,7 +112,32 @@ def premium():
 
     session["premium_age_counts"] = age_counts
     session["premium_plan"] = plan
+    session.pop("premium_selected_company", None)
     set_trip_context_value("premium_estimated", True)
+    return redirect(url_for("insurance.index", tab="premium"))
+
+
+@insurance_bp.route("/premium/select", methods=["POST"])
+@region_required
+def premium_select():
+    company = request.form.get("company")
+    age_counts = session.get("premium_age_counts")
+    plan_choice = session.get("premium_plan")
+    if company not in insurance_service.PREMIUM_BASE_RATES or not (age_counts and plan_choice):
+        flash("먼저 보험료를 계산한 뒤 선택해 주세요.", "warning")
+        return redirect(url_for("insurance.index", tab="premium"))
+
+    plan_info = get_trip_context().get("plan")
+    days, _ = insurance_service.days_from_plan(plan_info)
+    rows = insurance_service.calculate_premiums(days, age_counts, plan_choice)
+    selected = next((row for row in rows if row["company"] == company), None)
+    if not selected:
+        flash("선택한 보험사를 찾을 수 없습니다.", "warning")
+        return redirect(url_for("insurance.index", tab="premium"))
+
+    session["premium_selected_company"] = company
+    set_trip_context_value("premium_selection", {"plan": plan_choice, **selected})
+    flash(f"'{company}'를 예상 보험료로 선택했어요.", "success")
     return redirect(url_for("insurance.index", tab="premium"))
 
 

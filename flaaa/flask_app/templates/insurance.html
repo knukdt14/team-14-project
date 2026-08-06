@@ -56,12 +56,22 @@
   </form>
 
   {% if premium_rows %}
-    <div class="rag-section-label" style="margin-top:20px;">📊 계산 결과</div>
+    <div class="rag-section-label" style="margin-top:20px;">📊 계산 결과 · 마음에 드는 곳을 선택해보세요</div>
     {% for row in premium_rows %}
-      <div class="friendly-box" style="margin-bottom:10px;">
-        <b>{{ row.company }}</b>{% if row.is_estimated %} (일부 추정치 포함){% endif %}<br>
-        2일 기준요금 {{ '{:,}'.format(row.base) }}원 × {{ row.days_factor }} × ({{ row.breakdown }})
-        = <b>약 {{ '{:,}'.format(row.total) }}원</b>
+      {% set is_selected = selected_company == row.company %}
+      <div class="friendly-box {{ 'premium-row-selected' if is_selected else '' }}" style="margin-bottom:10px;">
+        <div class="form-row" style="align-items:center; justify-content:space-between; margin-bottom:0; flex-wrap:nowrap;">
+          <div>
+            <b>{{ row.company }}</b>{% if row.is_estimated %} (일부 추정치 포함){% endif %}
+            {% if is_selected %}<span class="card-selected">✓ 선택됨</span>{% endif %}<br>
+            2일 기준요금 {{ '{:,}'.format(row.base) }}원 × {{ row.days_factor }} × ({{ row.breakdown }})
+            = <b>약 {{ '{:,}'.format(row.total) }}원</b>
+          </div>
+          <form method="post" action="{{ url_for('insurance.premium_select') }}" style="flex-shrink:0;">
+            <input type="hidden" name="company" value="{{ row.company }}">
+            <button type="submit" class="btn {{ 'btn-outline' if is_selected else 'btn-primary' }} btn-sm">{{ '✓ 선택됨' if is_selected else '이걸로 선택' }}</button>
+          </form>
+        </div>
       </div>
     {% endfor %}
   {% endif %}
@@ -195,4 +205,9 @@
 <p style="color:var(--text-faint); font-size:13px; margin-top:20px;">
   안내 · 이 페이지가 제공하는 보험료와 답변은 참고용이며 법적 효력이 없습니다. 정확한 보장 여부는 해당 보험사에 확인하세요.
 </p>
+
+<div class="next-step-bar" style="margin-top:16px;">
+  <span style="color:var(--text-muted); font-size:14px;">여기까지 정한 내용을 한눈에 모아볼까요?</span>
+  <a class="btn btn-primary" href="{{ url_for('summary.index') }}">여행 요약·동선 보기 →</a>
+</div>
 {% endblock %}
