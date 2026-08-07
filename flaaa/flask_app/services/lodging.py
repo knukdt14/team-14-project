@@ -255,6 +255,7 @@ def search_lodging_for_anchors(anchors: list[dict], radius_m: int, api_key: str 
             if best is None or dist < best["distance"]:
                 updated = dict(place)
                 updated["distance"] = int(dist)
+                updated["distance_from"] = anchor.get("label")
                 merged[place_key] = updated
     return sorted(merged.values(), key=lambda p: p["distance"])
 

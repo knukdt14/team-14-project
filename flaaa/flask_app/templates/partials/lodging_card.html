@@ -29,7 +29,7 @@
     </div>
     <div class="card-addr" title="{{ addr }}">{{ addr }}</div>
     <div class="card-meta-row">
-      <span>📍 {{ (place.distance|string ~ 'm') if place.distance else '거리 정보 없음' }}</span>
+      <span title="{{ place.distance_from or '' }}">📍 {{ (place.distance_from ~ ' · ') if place.distance_from else '' }}{{ (place.distance|string ~ 'm') if place.distance else '거리 정보 없음' }}</span>
       <span>📞 {{ place.phone or '전화번호 정보 없음' }}</span>
     </div>
     <div class="card-actions">
